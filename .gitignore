@@ -1,0 +1,7 @@
+node_modules/
+recordings/*
+!recordings/.gitkeep
+samples/ai/
+*.tmp.wav
+.DS_Store
+.vscode/

@@ -1,0 +1,27 @@
+{
+  "name": "strudel-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal live coding music workspace for Strudel",
+  "scripts": {
+    "postinstall": "node ./scripts/patch-strudel-server.mjs && node ./scripts/ensure-deps.mjs",
+    "patch-strudel-server": "node ./scripts/patch-strudel-server.mjs",
+    "ensure-deps": "node ./scripts/ensure-deps.mjs",
+    "sampler": "PORT=5555 npx @strudel/sampler --dir ./samples",
+    "watch": "bun node_modules/strudel-server/src/main.ts patterns/scratch.strudel",
+    "dev": "concurrently -n sam,watch -c blue,green \"npm run sampler\" \"npm run watch\"",
+    "reload": "node ./scripts/reload.mjs",
+    "rec": "./scripts/rec.sh",
+    "chop": "./scripts/chop.sh",
+    "trim": "./scripts/trim.sh",
+    "norm": "./scripts/norm.sh",
+    "yt": "./scripts/yt.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "strudel-server": "github:micahkepe/strudel-server"
+  },
+  "dependencies": {
+    "@strudel/sampler": "^0.2.4"
+  }
+}
