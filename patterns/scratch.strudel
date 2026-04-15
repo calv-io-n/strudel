@@ -1,45 +1,73 @@
-// drum and bass — ~174bpm, F minor
-// drums: kick 0,7,10  snare 4,12  (16-step grid)
-// bass: super saw 8ths in F minor, ducked by the kick
-
 samples('http://localhost:5555')
 samples('github:tidalcycles/Dirt-Samples')
 
-setcps(174/60/4)
+setCpm(170/4)
+setGainCurve(x => x ** 3); // Steeper curve for punchier dynamics
 
-// --- kick: positions 0, 7, 10 of 16 ---
-$: s("bd").struct("1 0 0 0 0 0 0 1 0 0 1 0 0 0 0 0")
-   .bank("RolandTR909")
-   .gain(1)
+// Drum and bass
+$drums: stack(
+  s("bd:1").beat("0,7?,10",16).duck("3:4:5"),
+  s("sd:2").beat("4,12", 16),
+  s("hh:1!8").bank("RolandTR909")
+)
+  .orbit(2)
+  ._scope()
 
-// --- snare: positions 4, 12 of 16 ---
-$: s("sd").struct("0 0 0 0 1 0 0 0 0 0 0 0 1 0 0 0")
-   .bank("RolandTR909")
-   .gain(0.95)
+$bass: s("supersaw!8")
+  .note("<a2 f2 c3 c3>".sub(12))
+  .delay(slider(0.664))
+  .gain(1)
+  ._scope()
+$lead: note("<c d a g>".add(12))
+  .s("sine")
 
-// --- hats: 8th notes ---
-$: s("hh*8")
-   .bank("RolandTR909")
-   .gain(0.4)
 
-// --- bass: super saw, 8th notes, F minor (C# F D# D# A#), down an octave ---
-$: note("c#2 f2 d#2 d#2 a#2 c#2 f2 d#2".sub(12))
-   .s("supersaw")
-   .lpf(sine.range(400, 1600).slow(8))
-   .lpq(8)
-   // sidechain duck on the kick hits (0, 7, 10)
-   .gain("0.2 1 1 1 1 1 1 0.2 1 1 0.2 1 1 1 1 1".fast(1).mul(0.85))
-   .room(0.15)
-
-// --- vocal chops (uncomment when you have samples/vocals/*.wav) ---
-// $: s("vocals:0")
-//    .chop(8)
-//    .speed(perlin.range(0.5, 2))
-//    .gain(0.6)
-//    .delay(0.4).delaytime(perlin.range(0.1, 0.4)).delayfeedback(0.5)
-
-// --- build / riser (uncomment for transitions) ---
-// $: s("pulse").struct("1*16")
-//    .note(time.range(40, 90))
-//    .decay(0.05)
-//    .gain(0.5)
+$chorus: note("<c3 d <g3 g4>>".add(12))
+  .s("sine")
+  .clip(2)
+  .lpf(2500)
+  .attack(0.5)
+  .decay(0.3)
+  .sustain(0.7)  // increased from 0.7
+  .release(0.6)   // increased from 0.6
+  .delay(0.8)
+  .delaytime(0.375)
+  .delayfeedback(0.3)
+  .room(3)
+  .gain(0.6)
+  .chorus(0.5)
+  .layer(
+    x => x.add(7),  // add a fifth
+    x => x.add(-12)  // add lower octave
+  )
+  ._scope()
+$melody: note("<[c3 c3 - g3][d3 d3 - g3] [c3 c3 - -][g4 g4] >")
+  .s("sine")
+  .fast(1)
+  .gain(1.4)
+   .clip(2)
+  .hpf(600)  // brighter, not too dark
+  .attack(0.01)  // quick attack
+  .decay(0.6)
+  .sustain(0.6)
+  .release(0.3)
+  .room(0.3)  // subtle reverb
+  .delay(0.1)
+  .delaytime(0.375)  // rhythmic delay
+  .delayfeedback(0.3)
+  ._scope()
+$melody2: note("<- - [[d3 c3]  [ - - g2 g2]] ->".add(12))
+  .s("square")
+  .gain(1.0)
+  .attack(0.1)
+  .sustain(0.5)
+  .cutoff(2000)
+  .lpf(sine.range(1800, 3200).slow(4))
+  .resonance(2)
+  .delay(0.5)
+  .delaytime(0.375)
+  .delayfeedback(0.7)
+  .room(0.7)
+  .orbit(4)
+  .fast(1)
+  ._scope()

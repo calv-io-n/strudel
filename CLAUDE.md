@@ -16,6 +16,8 @@ npm run dev                       # daily driver: sampler + watcher under concur
 npm run sampler                   # sampler only (foreground)
 npm run watch                     # file watcher only (foreground)
 npm run reload                    # safely re-push patterns/scratch.strudel to the browser (no edit)
+npm run save -- <name> [--force] [--clear]   # save scratch → patterns/sets/<name>.strudel
+npm run load -- <name> [--force]             # load patterns/sets/<name>.strudel → scratch (refuses on dirty scratch)
 
 npm run patch-strudel-server      # re-apply the upstream selector patch (idempotent)
 npm run ensure-deps               # re-run bun + chromium + ffmpeg + yt-dlp readiness check

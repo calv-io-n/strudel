@@ -4,4 +4,3 @@ recordings/*
 samples/ai/
 *.tmp.wav
 .DS_Store
-.vscode/

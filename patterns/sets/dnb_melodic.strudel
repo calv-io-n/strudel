@@ -1,3 +1,6 @@
+samples('http://localhost:5555')
+samples('github:tidalcycles/Dirt-Samples')
+
 setCpm(170/4)
 setGainCurve(x => x ** 3); // Steeper curve for punchier dynamics
 
@@ -5,7 +8,7 @@ setGainCurve(x => x ** 3); // Steeper curve for punchier dynamics
 $drums: stack(
   s("bd:1").beat("0,7?,10",16).duck("3:4:5"),
   s("sd:2").beat("4,12", 16),
-  s("dpm48_hh:1!8")
+  s("hh:1!8").bank("RolandTR909")
 )
   .orbit(2)
   ._scope()

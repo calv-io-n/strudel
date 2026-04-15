@@ -11,6 +11,8 @@
     "watch": "bun node_modules/strudel-server/src/main.ts patterns/scratch.strudel",
     "dev": "concurrently -n sam,watch -c blue,green \"npm run sampler\" \"npm run watch\"",
     "reload": "node ./scripts/reload.mjs",
+    "save": "node ./scripts/save.mjs",
+    "load": "node ./scripts/load.mjs",
     "rec": "./scripts/rec.sh",
     "chop": "./scripts/chop.sh",
     "trim": "./scripts/trim.sh",

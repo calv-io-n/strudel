@@ -1,0 +1,10 @@
+{
+  "files.associations": {
+    "*.strudel": "javascript",
+    "*.str": "javascript"
+  },
+  "editor.wordWrap": "on",
+  "editor.fontSize": 16,
+  "editor.minimap.enabled": false,
+  "editor.renderWhitespace": "none"
+}

@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Studio",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Record Sample",
+      "type": "shell",
+      "command": "./scripts/rec.sh ${input:sampleName}",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true }
+    },
+    {
+      "label": "Restart Sampler",
+      "type": "shell",
+      "command": "npm run sampler",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "sampleName",
+      "type": "promptString",
+      "description": "Sample path (e.g. vocals/scream)",
+      "default": "vocals/quick"
+    }
+  ]
+}

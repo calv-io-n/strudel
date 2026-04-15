@@ -279,27 +279,33 @@ wherever it belongs) so it gets committed.
 
 ## Saving and reopening pieces
 
-There's no DB and no metadata layer. A piece is just a text file.
+There's no DB and no metadata layer. A piece is just a text file in
+`patterns/sets/`. Two npm scripts wrap the copy dance and give you a
+safety net:
 
 ```bash
-# Save the current scratchpad as a real piece
-cp patterns/scratch.strudel patterns/sets/midnight_drive.strudel
-git add patterns/sets/midnight_drive.strudel
-git commit -m "midnight drive v1"
+# Save the current scratchpad as a named piece
+npm run save -- midnight_drive
+# → writes patterns/sets/midnight_drive.strudel
+# Refuses if midnight_drive.strudel already exists (pass --force to overwrite).
+# Add --clear to wipe scratch after saving, ready for the next idea.
+
+# Reopen a piece
+npm run load -- midnight_drive
+# → copies patterns/sets/midnight_drive.strudel back into patterns/scratch.strudel.
+# The watcher sees the write and re-pushes to Chromium within ~200ms.
 ```
 
-To reopen:
+**The load safety net**: before overwriting `scratch.strudel`, `npm run load`
+checks whether current scratch matches any file in `patterns/sets/`. If it
+matches one → clean, safe to switch. If it matches nothing → you have
+unsaved work and the command refuses, telling you to either save it first
+(`npm run save -- <name>`) or pass `--force` to discard. Stateless and
+stubborn on purpose.
 
-```bash
-cp patterns/sets/midnight_drive.strudel patterns/scratch.strudel
-# ...edit, save, hear it...
-cp patterns/scratch.strudel patterns/sets/midnight_drive.strudel  # save back
-```
-
-If you don't like the copy-back step, you can also just open the set file
-directly in VS Code and **paste its contents into `scratch.strudel`** every
-time you want to play it. Slightly more friction but no risk of losing
-in-progress edits.
+You can still copy by hand — `cp patterns/scratch.strudel
+patterns/sets/foo.strudel` works fine. The scripts just remove two ways
+to shoot yourself in the foot.
 
 ---
 
