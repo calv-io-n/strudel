@@ -189,24 +189,25 @@ test('a single WAV placed on the timeline plays once and extending the clip adds
   await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(4600);
   const captured=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
   expect(captured.bins[0].peak).toBeGreaterThan(.02);
-  expect(await page.evaluate(()=>(window as any).takeAllocations)).toEqual({decodes:1,convolvers:0});
+  expect(await page.evaluate(()=>(window as any).takeAllocations)).toEqual({decodes:0,convolvers:0});
   expect(Math.max(...captured.bins.slice(3).map(b=>b.peak))).toBeLessThan(.0001);
   await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');await page.reload();
   await page.locator('[data-play-target=composition]').click();await clipProperties(page);
   await expect(page.locator('#clip-playback')).toHaveValue('once');
-  await page.locator('#clip-playback').selectOption('pattern');await page.locator('#clip-form button[value=save]').click();
+  await page.locator('#clip-playback').selectOption('pattern');await page.locator('#clip-form button[value=save]').click();await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(4600);
   const repeated=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
   expect(repeated.bins[4].peak).toBeGreaterThan(.02);
   await clipProperties(page);await page.locator('#clip-playback').selectOption('once');await page.locator('#clip-form button[value=save]').click();
-  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');await page.reload();await page.locator('[data-play-target=composition]').click();
-  await page.evaluate(()=>{
+  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
+  await page.addInitScript(()=>{
     const decode=BaseAudioContext.prototype.decodeAudioData;
     BaseAudioContext.prototype.decodeAudioData=async function(...args:Parameters<typeof decode>){
       await new Promise<void>(resolve=>(window as any).releaseTakeDecode=resolve);
       return decode.apply(this,args);
     };
   });
+  await page.reload();await expect(page.locator('#saved-projects')).toHaveValue('One-shot-sample');await page.locator('[data-play-target=composition]').click();
   await page.locator('#composition-play').click();
   await page.waitForFunction(()=>typeof (window as any).releaseTakeDecode==='function');
   await page.locator('#composition-stop').click();await page.evaluate(()=>(window as any).releaseTakeDecode());

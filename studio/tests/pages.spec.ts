@@ -294,7 +294,7 @@ test('recording works in an empty timeline and permission denial leaves no take'
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(500);
   await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 }); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);
-  const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(0); expect(project.tabs[0].code).toContain('// Recorded audio');
+  const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(1); expect(project.tabs.find((t: any) => t.id === project.clips[0].tabId).code).toContain('// Recorded audio');
 });
 
 test('existing pattern recording joins playback and stops before an existing clip', async ({ page }) => {
@@ -370,7 +370,7 @@ test('different edits in two tabs keep both versions and each tab reloads its ow
   await expect(second.locator('#notice')).toContainText('Saved as a conflict copy');
   await expect.poll(async () => (await records(page, 'projects')).length).toBe(2);
   const saved = await records(page, 'projects'); expect(saved.map(p => p.name).sort()).toEqual(['First version', 'Second version (conflict copy)']);
-  const copiedId = await second.locator('#saved-projects').inputValue(); expect(copiedId).not.toBe('Neon-Drive');
+  await expect(second.locator('#saved-state')).toHaveText('Saved'); const copiedId = await second.locator('#saved-projects').inputValue(); expect(copiedId).not.toBe('Neon-Drive');
   await second.locator('#save-now').click(); await second.reload(); await expect(second.locator('#saved-projects')).toHaveValue(copiedId);
   await page.reload(); await expect(page.locator('#project-name')).toHaveValue('First version'); expect(await records(page, 'projects')).toHaveLength(2);
   await second.close();
@@ -402,7 +402,7 @@ test('a legacy stale draft is recovered as one copy without overwriting newer sa
   const second = await context.newPage(); await start(second); await second.locator('#project-name').fill('Newer saved work'); await second.locator('#save-now').click();
   await expect.poll(async () => (await records(page, 'projects'))[0].name).toBe('Newer saved work');
   await page.evaluate(stale => localStorage.setItem('studio.pending-session', JSON.stringify(stale)), stale);
-  await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Original draft (conflict copy)');
+  await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Original draft'); await page.locator('#save-now').click(); await expect(page.locator('#project-name')).toHaveValue('Original draft (conflict copy)');
   expect((await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').name).toBe('Newer saved work');
   await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Original draft (conflict copy)'); expect(await records(page, 'projects')).toHaveLength(2);
   await second.close();

@@ -81,8 +81,8 @@ test('recording shows status then resolves to highlighted review code', async ({
   await page.screenshot({path:'/tmp/native-code-review-dark.png'}); await page.locator('#dark-mode').uncheck();
   await page.setViewportSize({width:640,height:900}); await ghosts.last().scrollIntoViewIfNeeded(); await ghosts.last().evaluate(el => { el.closest('.cm-scroller')!.scrollLeft = 0; }); await page.screenshot({path:'/tmp/native-code-review-narrow.png'});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  const previewBounds = await page.locator('#record-preview').boundingBox(), closeBounds = await page.locator('#record-close').boundingBox();
-  expect(Math.abs(previewBounds!.y - closeBounds!.y)).toBeLessThan(5);
+  const previewBounds = await page.locator('#record-preview').boundingBox(), keepBounds = await page.locator('#record-retry').boundingBox();
+  expect(Math.abs(previewBounds!.y - keepBounds!.y)).toBeLessThan(5);
   await page.locator('#record-retry').click(); await expect(ghosts).toHaveCount(0);
 });
 

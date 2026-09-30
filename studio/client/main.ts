@@ -980,7 +980,7 @@ midiComposition.root.dataset.legacyReview = 'true';
 
 async function commitCaptureProject(next: Project) {
   const staged = normalizeProjectTempo(next);
-  sessionDrafts.cache(staged, acceptedProject); await sessionDrafts.flush();
+  sessionDrafts.cache(staged, unbasedDraftSession === selectedProjectName ? undefined : acceptedProject); await sessionDrafts.flush();
   return staged;
 }
 
@@ -1064,6 +1064,9 @@ function currentProject(): Project {
 }
 function snapshot(): Project { return normalizeProjectTempo(currentProject()); }
 let acceptedProject: Project | undefined;
+// Legacy recovery has no trustworthy saved baseline. Preserve its revision so
+// an explicit Save creates a conflict copy instead of overwriting newer work.
+let unbasedDraftSession: string | undefined;
 const sessionDrafts = new SessionDrafts();
 let preloadTimer: ReturnType<typeof setTimeout>;
 let draftWriteVersion = 0, draftSaving = false, draftError = '';
@@ -1073,7 +1076,7 @@ function cacheDraft() {
   clearTimeout(preloadTimer);
   preloadTimer = setTimeout(() => engine.preloadProject(structuredClone(snapshot())), 300);
   const version = ++draftWriteVersion; draftSaving = true; draftError = '';
-  try { sessionDrafts.cache(snapshot(), acceptedProject); } catch { /* The durable write still runs when the synchronous cache is full. */ }
+  try { sessionDrafts.cache(snapshot(), unbasedDraftSession === selectedProjectName ? undefined : acceptedProject); } catch { /* The durable write still runs when the synchronous cache is full. */ }
   void sessionDrafts.flush().then(() => {
     if (version !== draftWriteVersion) return;
     draftSaving = false; paintDirtyState();
@@ -1123,7 +1126,7 @@ async function saveAndApply(): Promise<void> {
       candidate.appliedPatterns = Object.fromEntries(candidate.tabs.map(tab => [tab.id, tab.code]));
       candidate.appliedPatternAnchors = Object.fromEntries(candidate.tabs.map(tab => [tab.id, tab.anchors]));
       if (session !== selectedProjectName) throw new Error('The session changed. Save again.');
-      const result = await saveSession(candidate, base);
+      const result = await saveSession(candidate, unbasedDraftSession === session ? undefined : base);
       if (result.kind === 'refreshed') {
         if (revision !== saveRevision) throw new Error('A newer session exists in another window. Your newer edits are retained.');
         sessionDrafts.clear(selectedProjectName); savingSession = false;
@@ -1131,6 +1134,7 @@ async function saveAndApply(): Promise<void> {
         notice('Loaded the newer saved session from another window.'); return;
       }
       acceptedProject = structuredClone(result.project);
+      unbasedDraftSession = undefined;
       selectedProjectName = result.project.sessionId!; project.sessionId = selectedProjectName; project.revision = result.project.revision;
       if (result.kind === 'copied') { project.name = result.project.name; $('#project-name').value = project.name; notice('Saved as a conflict copy; both sessions are kept.'); }
       await activate();
@@ -1140,6 +1144,7 @@ async function saveAndApply(): Promise<void> {
       if (project.audioInput && candidate.audioInput) { project.audioInput.appliedCode = candidate.audioInput.appliedCode; project.audioInput.appliedAnchors = candidate.audioInput.appliedAnchors; }
       project.appliedPatterns = candidate.appliedPatterns; project.appliedPatternAnchors = candidate.appliedPatternAnchors;
       sessionStorage.setItem('studio.session', selectedProjectName); cacheDraft(); await refreshProjects();
+      $('#saved-projects').value = selectedProjectName;
       if (revision !== saveRevision) $('#saved-state').textContent = 'Newer edits remain unsaved';
     } catch (error) {
       lastSaveError = (error as Error).message;
@@ -1653,6 +1658,7 @@ async function loadProject(next: Project, markDirty = true, expectedRevision?: n
   contextMenu.close(false);
   releaseWorkspaceNotes(); effectsRevealed.clear(); workspaceKeysOpen = false;
   const staged = markDirty ? await sessionDrafts.recover(next.sessionId) : undefined;
+  unbasedDraftSession = staged && !staged.base ? next.sessionId : undefined;
   clearTimeout(preloadTimer);
   const accepted = ProjectSchema.parse(staged?.base ?? next); const validated = normalizeProjectTempo(structuredClone(staged?.project ?? next)); instrumentFor(validated); instrumentOpen = false; audioOpen = false; liveInput.disconnect();
   for (const id of assetReferences(validated)) if (!assets.some(a => a.id === id)) assets.push({ id, label: `Missing sound ${id.slice(0, 8)}`, prompt: '', duration: null, loop: false, provider: 'upload', format: 'wav', createdAt: '', missing: true });
@@ -2365,6 +2371,7 @@ async function boot() {
   if (draft && draft.project.sessionId === restored.sessionId) { restored = draft.project; pendingDraft = true; }
   await loadProject(restored, false);
   if (pendingDraft) acceptedProject = draft?.base ?? savedBaseline;
+  if (pendingDraft && !draft?.base) unbasedDraftSession = restored.sessionId;
   $('#saved-state').textContent = pendingDraft ? 'Unsaved draft recovered' : 'Saved';
   restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); await refreshAudioPresets(); connectMidiEvents(); booted = true; routePage();
   // One automatic opening per page load, after recovery has initialized.
