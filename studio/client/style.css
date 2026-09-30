@@ -203,11 +203,6 @@ kbd { margin-left: 6px; font-size: 10px; color: inherit; opacity: .75; }
 .save-state button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
 .composition-toggle { display: flex; align-items: center; gap: 9px; margin-left: auto; padding: 6px 12px; }
 .composition-toggle[aria-expanded=true] { color: var(--text); }
-.mini-clips { display: flex; align-items: center; gap: 2px; }
-.mini-clips i { display: block; height: 8px; border-radius: 2px; }
-.mini-clips i:nth-child(1) { width: 26px; background: #2b9c8e; }
-.mini-clips i:nth-child(2) { width: 44px; background: #29a7c6; }
-.mini-clips i:nth-child(3) { width: 58px; background: #528ee8; }
 .chevron::after { content: '▴'; font-size: 10px; color: var(--muted); }
 .composition-toggle[aria-expanded=true] .chevron::after { content: '▾'; }
 
@@ -538,7 +533,7 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 
 @media (max-width: 1000px) {
   .topbar { gap: 10px; }
-  .wordmark span, .search-button span, .mini-clips { display: none; }
+  .wordmark span, .search-button span { display: none; }
   #project-name { width: 110px; }
 }
 @media (max-width: 760px) {
@@ -703,3 +698,68 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 .clip strong, .clip small { position:relative; z-index:1; }
 .clip-waveform { position:absolute; left:0; bottom:3px; width:100%; height:32px; color:var(--pattern-color,var(--accent)); pointer-events:none; }
 
+
+/* Music navigation stays separate from transport and session controls. */
+.topbar { flex-wrap: wrap; height: auto; min-height: 56px; padding-block: 8px; }
+.transport { order: 5; flex-basis: 100%; justify-content: center; flex-wrap: wrap; }
+.transport #transport-state { display: inline; margin: 0; }
+.save-state { max-width: 220px; }
+.drawer-bar > .divider:has(+ #input-tabs[hidden]) { display: none; }
+.library-options { position: relative; }
+.library-options > summary { padding: 8px; list-style: none; }
+.library-options > div { position: absolute; right: 0; top: 100%; z-index: 4; display: grid; gap: 6px; padding: 8px; min-width: 160px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
+#library-management { flex: 1; min-height: 0; overflow: auto; padding: 12px 24px; }
+#library-back { margin-bottom: 12px; }
+.asset-options > div { top: 100%; bottom: auto; width: min(260px, 75vw); max-height: 300px; overflow: auto; }
+.asset-options p { white-space: normal; overflow-wrap: anywhere; font-size: 12px; color: var(--muted); }
+.asset-options > div, .library-options > div { position: fixed; right: auto; bottom: auto; z-index: 105; }
+#assignment { margin-top: 12px; }
+#clip-properties { overflow: auto; min-height: 0; padding: 16px; border-left: 1px solid var(--line); background: var(--panel); }
+#clip-properties h2 { flex: 1; font-size: 15px; }
+#clip-properties label { margin-top: 8px; }
+#clip-error { color: var(--danger); font-size: 12px; }
+#composition-content.has-properties { display: grid; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr); }
+.has-properties > .composition-toolbar { grid-column: 1 / -1; }
+.has-properties > #sequencer-scroll { grid-column: 1; grid-row: 2; }
+.has-properties > #clip-properties { grid-column: 2; grid-row: 2; }
+.clip[aria-pressed=true] { box-shadow: inset 0 0 0 2px var(--text); }
+@media (max-width: 760px) {
+  .drawer-bar { flex-wrap: nowrap; }
+  #tabs { flex: 1 1 0; }
+  .composition-toggle { padding-inline: 6px; }
+  .transport { gap: 5px; }
+  .save-state { max-width: 160px; }
+  #composition-content.has-properties { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(90px, 1fr) minmax(80px, 1fr); }
+  .has-properties > #clip-properties { grid-column: 1; grid-row: 3; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 760px) {
+  #drawer:has(.has-properties) { min-height: min(520px, 60dvh); }
+}
+
+/* Recording setup: essentials first, one explicit action. */
+#record-bar { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 24px; max-height: 55dvh; overflow-y: auto; }
+.record-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.record-heading strong { font-size: 14px; font-weight: 600; }
+#record-bar .record-options { display: flex; align-items: flex-start; gap: 16px 24px; }
+#record-bar .record-options label, .record-source-choice { display: flex; flex-direction: column; align-items: stretch; gap: 7px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+#record-bar label > select { margin-top: 0; }
+.record-source-help { font-size: 11px; }
+#record-bar .chips { gap: 6px; }
+#record-bar .chips button { min-height: 34px; padding: 6px 12px; border: 1px solid var(--line); }
+#record-bar .chips button[aria-pressed=true] { border-color: var(--accent); }
+#record-bar select { min-height: 34px; padding: 6px 10px; font-size: 12px; }
+#record-bar #midi-record-hint { margin: 0; max-width: 80ch; font-size: 12px; line-height: 1.5; }
+#record-midi-options summary { width: fit-content; cursor: pointer; color: var(--muted); font-size: 12px; }
+.record-midi-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-top: 12px; }
+.record-midi-fields > label:not(.inline) { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--muted); }
+#record-bar .record-actions, #record-bar[data-mode=midi] .record-actions { grid-column: 1 / -1; grid-row: auto; border-top: 1px solid var(--line); padding-top: 12px; gap: 10px; }
+#record-start { margin-left: auto; min-height: 36px; }
+#record-bar #record-status { max-width: none; white-space: normal; font-size: 12px; }
+#record-midi-connection { grid-row: 3; }
+@media (max-width: 700px) {
+  #record-bar { padding: 12px 16px; }
+  #record-bar .record-options { gap: 12px 16px; }
+  .record-source-choice { flex-basis: 100%; }
+  #record-bar .record-destination, #record-bar .record-track { flex: 1; min-width: 0; }
+  #record-bar .record-track select { max-width: none; }
+}

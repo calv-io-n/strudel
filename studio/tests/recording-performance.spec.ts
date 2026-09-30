@@ -1,3 +1,4 @@
+import { inputTab } from './workspace-actions';
 import { writeFile } from 'node:fs/promises';
 import { installAudioCapture } from './audio-capture';
 import { midiRecovery } from './midi-recovery';
@@ -38,31 +39,34 @@ async function project(page: Page) {
 
 test('MIDI quantization defaults on, persists choices, and records the selected grid', async ({ page }) => {
   await setup(page);
+  await page.locator('#record-midi-options summary').click();
   const grid = page.getByRole('combobox', { name: 'MIDI quantization', exact: true });
   await expect(grid).toHaveValue('0.0625');
   await expect(grid.locator('option')).toHaveCount(5);
   await grid.selectOption('0');
   await page.reload(); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
+  await page.locator('#record-midi-options summary').click();
   await expect(grid).toHaveValue('0');
   await grid.selectOption('0.03125');
   if (await page.locator('[data-capture=audio]').getAttribute('aria-pressed') === 'true') await page.locator('[data-capture=audio]').click();
   await page.locator('#record-midi-connection [data-midi-enable]').click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+  await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await expect(grid).toBeDisabled();
   await expect(page.locator('.performance-panel [data-state]')).toContainText('Recording ·');
-  await notes(page); await page.locator('#stop').click();
+  await notes(page); await page.locator('#stop:visible, #composition-stop:visible').click();
   await expect.poll(async () => (await midiRecovery(page))?.grid).toBe(1 / 32);
-  await page.reload(); await expect(grid).toHaveValue('0.03125');
+  await page.reload(); await page.locator('#record-midi-options summary').click(); await expect(grid).toHaveValue('0.03125');
   await expect(grid).toBeDisabled();
 });
 
 for (const enabled of [false, true]) test(`MIDI velocity normalization ${enabled ? 'on' : 'off'} persists through recovery and saving`, async ({ page }) => {
   await setup(page);
+  await page.locator('#record-midi-options summary').click();
   const toggle = page.getByRole('checkbox', { name: 'Normalize velocity', exact: true });
   await expect(toggle).not.toBeChecked();
   await toggle.setChecked(enabled);
   if (await page.locator('[data-capture=audio]').getAttribute('aria-pressed') === 'true') await page.locator('[data-capture=audio]').click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+  await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await expect(toggle).toBeDisabled();
   await expect(page.locator('.performance-panel [data-state]')).toContainText('Recording ·');
   await page.evaluate(() => { (window as any).midi(60, true, 20); (window as any).midi(64, true, 120); });
@@ -71,13 +75,14 @@ for (const enabled of [false, true]) test(`MIDI velocity normalization ${enabled
   await page.locator('#record-toggle').click();
   await expect.poll(async () => (await midiRecovery(page))?.normalizeVelocity).toBe(enabled);
   expect((await midiRecovery(page)).notes.map((n: any) => n.velocity)).toEqual([20, 120]);
-  await page.reload(); await expect(toggle).toBeChecked({ checked: enabled }); await expect(toggle).toBeDisabled();
+  await page.reload(); await page.locator('#record-midi-options summary').click(); await expect(toggle).toBeChecked({ checked: enabled }); await expect(toggle).toBeDisabled();
   await page.locator('[data-accept]').filter({ visible: true }).click();
   await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible();
   const saved = await project(page), code = saved.tabs.find((t: any) => t.name === 'Take 1').code;
   const velocities = [...code.matchAll(/velocity\(([^)]+)\)/g)].map(m => Number(m[1]));
   expect(velocities).toEqual(enabled ? [.787402, .787402] : [.15748, .944882]);
   await page.reload(); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
+  await page.locator('#record-midi-options summary').click();
   await expect(toggle).toBeChecked({ checked: enabled });
 });
 
@@ -85,7 +90,7 @@ test('new MIDI pattern records directly onto an occupied composition track', asy
   await installAudioCapture(page); await setup(page);
   if (await page.locator('[data-capture=audio]').getAttribute('aria-pressed') === 'true') await page.locator('[data-capture=audio]').click();
   await page.locator('#record-track').selectOption('track-2');
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+  await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await page.waitForTimeout(100); await notes(page);
   await expect(page.locator('[data-pending-tab]')).toHaveCount(1);
   await expect(page.locator('.pending-code').filter({ hasText: 'timeCat' })).toHaveCount(0);
@@ -100,7 +105,7 @@ test('new MIDI pattern records directly onto an occupied composition track', asy
   await page.getByRole('tab', { name: 'Take 1', exact: true }).click(); await page.locator('[data-play-target=tab]').click();
   for (let pass = 0; pass < 2; pass++) {
     await page.evaluate(() => window.neonCapture.start()); await page.locator('#play').click(); await page.waitForTimeout(2200);
-    const audio = await page.evaluate(() => window.neonCapture.finish()); await page.locator('#stop').click();
+    const audio = await page.evaluate(() => window.neonCapture.finish()); await page.locator('#stop:visible, #composition-stop:visible').click();
     expect(audio.bins.filter(bin => bin.peak > .001).length).toBeGreaterThanOrEqual(2);
   }
 });
@@ -109,7 +114,7 @@ test('recording arms at the next bar without restarting composition and saves bo
   await setup(page);
   await page.locator('#composition-play').click(); await page.waitForTimeout(450);
   const before = Number(await page.locator('#seek-handle').getAttribute('aria-valuenow'));
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+  await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   const after = Number(await page.locator('#seek-handle').getAttribute('aria-valuenow'));
   expect(after).toBeGreaterThanOrEqual(before);
   await page.waitForTimeout(1700); await notes(page); await page.locator('#composition-stop').click();
@@ -157,7 +162,7 @@ test('15 minute dense MIDI and controller soak with mic and looping backing', as
   await slider.click(); await page.getByRole('menuitem', { name: 'Bind MIDI control', exact: true }).click();
   await page.evaluate(() => { (window as any).sendCC(80); });
   await page.locator('#composition-loop').click(); await page.locator('#composition-play').click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+  await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await expect.poll(() => page.evaluate(() => (window as any).stress.start)).toBeGreaterThan(0);
   await page.evaluate(({ seconds, rate }) => {
     const s = (window as any).stress, w = window as any; let lastNote = -1, lastBurst = 0, last = performance.now();
@@ -278,10 +283,10 @@ test('input sliders change recorded sound immediately and defer code edits until
     } });
   });
   await setup(page); await page.locator('[data-capture=midi]').click();
-  await page.getByRole('tab', { name: 'Audio input', exact: true }).click();
+  await inputTab(page, 'audio');
   const content = page.locator('#editor .cm-content:visible');
   await content.fill('AUDIO.gain(slider(0.2, 0, 1, 0.01))'); await page.locator('#audio-apply').click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+  await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await expect.poll(() => page.evaluate(() => (window as any).inputPeaks[0] ?? 0)).toBeGreaterThan(.1);
   const before = await page.evaluate(() => { const peak = (window as any).inputPeaks[0]; (window as any).inputPeaks = []; return peak; });
   await page.locator('#editor .inline-slider:visible').evaluate((input: HTMLInputElement) => {
@@ -332,12 +337,13 @@ test('a large legacy MIDI transcription saves and stays audible on repeated play
   const reloaded = Date.now();
   await page.reload(); await expect(page.getByRole('tab', { name: 'Lead', exact: true })).toBeVisible({ timeout: 30000 });
   console.log('Legacy take reload ms', Date.now() - reloaded);
+  await page.locator('[data-play-target=tab]').click();
   for (let pass = 0; pass < 2; pass++) {
     await page.evaluate(() => window.neonCapture.start());
     await page.locator('#play').click(); await expect(page.locator('#play')).toBeDisabled({ timeout: 30000 });
     await page.waitForTimeout(2300);
     const result = await page.evaluate(() => window.neonCapture.finish());
-    await page.locator('#stop').click();
+    await page.locator('#stop:visible, #composition-stop:visible').click();
     expect(result.bins.filter(bin => bin.peak > .001).length).toBeGreaterThanOrEqual(2);
   }
   const saved = await project(page);

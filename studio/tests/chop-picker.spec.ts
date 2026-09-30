@@ -1,3 +1,4 @@
+import { liveSound } from './workspace-actions';
 import {test,expect,type Page} from '@playwright/test';
 import {zipSync,strToU8} from 'fflate';
 import {newProject,AssetSchema} from '../shared/model';
@@ -21,8 +22,9 @@ const editor='#editor .cm-content:visible';
 test('stack reference opens focused picker, auditions a crop and commits only its binding with undo and reload',async({page})=>{
  await setup(page);await openOpening(page);
  await page.locator(`[data-select-asset="${id}"]`).click();await expect(page.locator('#chop-use')).toBeEnabled();
- await expect(page.locator(`#assets [data-insert-existing="${id}"]`)).toBeHidden();await expect(page.locator('#library-keys')).toBeVisible();
+ await expect(page.locator(`#assets [data-insert-existing="${id}"]`)).toBeHidden();await expect(page.locator('#library-keys')).toBeHidden();
  await page.locator('#chop-region-editor [data-wav-start]').fill('.1');await page.locator('#chop-region-editor [data-wav-end]').fill('.35');
+ await liveSound(page, (await page.locator('.asset.selected [data-live-sound]').getAttribute('data-live-sound'))!);await expect(page.locator('#library-keys')).toBeVisible();await expect(page.locator('#chop-region-editor [data-wav-start]')).toHaveValue('.1');await expect(page.locator('#chop-region-editor [data-wav-end]')).toHaveValue('.35');
  await page.evaluate(()=>window.neonCapture.start());await page.locator('[data-library-note="60"]').focus();await page.keyboard.down('Space');await page.waitForTimeout(500);await page.keyboard.up('Space');
  expect((await page.evaluate(()=>window.neonCapture.finish())).peak).toBeGreaterThan(.02);
  await expect(page.locator(editor)).toContainText('s("sine")');
@@ -42,6 +44,7 @@ test('cancel leaves code unchanged; MIDI follows selection; confirmed live swaps
 });
 test('failed crop save retains destination and selection for retry; connected MIDI auditions without committing',async({page})=>{
  await setup(page);await openOpening(page);await page.locator(`[data-select-asset="${id}"]`).click();await expect(page.locator('#chop-use')).toBeEnabled();
+ await liveSound(page, (await page.locator('.asset.selected [data-live-sound]').getAttribute('data-live-sound'))!);await expect(page.locator('#chop-use')).toBeEnabled();
  await page.locator('#chop-region-editor [data-wav-start]').fill('.1');await page.locator('#chop-region-editor [data-wav-end]').fill('.3');
  const enable=page.locator('#library-midi-connection [data-midi-enable]');if(await enable.isVisible())await enable.click();
  await expect(page.locator('#library-midi-connection [data-midi-status]')).toContainText('MIDI ·');

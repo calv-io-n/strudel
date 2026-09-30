@@ -2,18 +2,27 @@ import { tempoRate, beatPosition, beatDuration } from '../shared/tempo';
 import type { Clip, Project } from '../shared/model';
 import { canPlace, snapPlacement, trimLeft } from '../shared/clips';
 
-export function installCompositionGestures(options: { project(): Project; placement?(tabId: string): Partial<Clip>; blocked(): boolean; commit(clip: Clip): void; open(id: string): void; reveal(): void }) {
+export function installCompositionGestures(options: { project(): Project; placement?(tabId: string): Partial<Clip>; blocked(): boolean; commit(clip: Clip): void; select(id?: string): void; openSource(id: string): void; reveal(): void }) {
   const scroll = document.querySelector<HTMLElement>('#sequencer-scroll')!;
   let suppressClick = false;
+  let lastDragAt = -Infinity;
   document.addEventListener('click', e => {
     if (suppressClick && e.detail > 0) { e.preventDefault(); e.stopImmediatePropagation(); suppressClick = false; return; }
     const clip = (e.target as HTMLElement).closest<HTMLElement>('[data-clip]');
-    if (clip && !options.blocked()) options.open(clip.dataset.clip!);
+    if (clip) options.select(clip.dataset.clip!);
+    else if ((e.target as HTMLElement).matches('.lane, .lane-empty')) options.select();
   }, true);
+  document.addEventListener('dblclick', e => {
+    const clip = (e.target as HTMLElement).closest<HTMLElement>('[data-clip]');
+    if (clip && performance.now() - lastDragAt > 500 && !(e.target as HTMLElement).closest('[data-resize]')) options.openSource(clip.dataset.clip!);
+  });
   document.addEventListener('keydown', e => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-clip]');
+    if (el && e.key === 'Enter') { e.preventDefault(); options.openSource(el.dataset.clip!); return; }
+    if (el && e.key === ' ') { e.preventDefault(); options.select(el.dataset.clip!); return; }
     if (!el || options.blocked() || !e.key.startsWith('Arrow')) return;
     e.preventDefault(); const p = options.project(), original = p.clips.find(c => c.id === el.dataset.clip)!;
+    options.select(original.id);
     const clip = { ...original }, index = p.tracks.findIndex(t => t.id === clip.trackId);
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') clip.trackId = p.tracks[index + (e.key === 'ArrowUp' ? -1 : 1)]?.id ?? clip.trackId;
     else if (e.altKey) Object.assign(clip, trimLeft(original, original.start + (e.key === 'ArrowLeft' ? -1 : 1) * p.snap, original.takeId ? 1 : tempoRate(p.tabs.find(t => t.id === original.tabId)!, p.bpm), p.bpm));
@@ -27,6 +36,7 @@ export function installCompositionGestures(options: { project(): Project; placem
     if (options.blocked()) return;
     const target = (e.target as HTMLElement).closest<HTMLElement>('[data-clip], [data-tab]'); if (!target) return;
     const p = options.project(), original = p.clips.find(c => c.id === target.dataset.clip);
+    if (original) options.select(original.id);
     const handle = (e.target as HTMLElement).closest<HTMLElement>('[data-resize]');
     const resize = handle?.dataset.resize === 'left' ? 'left' : !!handle;
     const base: Clip = original ? { ...original } : { id: crypto.randomUUID(), tabId: target.dataset.tab!, trackId: p.tracks[0].id, start: 0, length: 4, muted: false, ...options.placement?.(target.dataset.tab!) };
@@ -42,7 +52,7 @@ export function installCompositionGestures(options: { project(): Project; placem
       document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', cancel); document.removeEventListener('keydown', key); target.removeEventListener('lostpointercapture', cancel);
       if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
     };
-    const cancel = () => { if (active) { suppressClick = true; } cleanup(); };
+    const cancel = () => { if (active) { lastDragAt = performance.now(); suppressClick = true; } cleanup(); };
     const paint = () => {
       if (options.blocked() || options.project() !== p) { cancel(); return; }
       badge.style.left = `${Math.min(x + 16, window.innerWidth - 240)}px`; badge.style.top = `${Math.min(y + 18, window.innerHeight - 65)}px`;
@@ -74,7 +84,7 @@ export function installCompositionGestures(options: { project(): Project; placem
       if (!active && Math.hypot(x - e.clientX, y - e.clientY) >= 5) { active = true; target.setPointerCapture(e.pointerId); if (!original) options.reveal(); target.classList.add('drag-source'); document.body.classList.add('composition-dragging'); document.body.append(badge); paint(); }
       if (active) event.preventDefault();
     };
-    const up = (event: PointerEvent) => { if (event.pointerId !== e.pointerId) return; if (active) { x = event.clientX; y = event.clientY; cancelAnimationFrame(frame); paint(); } const result = candidate; cleanup(); if (active) { suppressClick = true; if (result && !options.blocked() && options.project() === p) options.commit(result); } };
+    const up = (event: PointerEvent) => { if (event.pointerId !== e.pointerId) return; if (active) { x = event.clientX; y = event.clientY; cancelAnimationFrame(frame); paint(); } const result = candidate; cleanup(); if (active) { lastDragAt = performance.now(); suppressClick = true; if (result && !options.blocked() && options.project() === p) options.commit(result); } };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); cancel(); } };
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', cancel); document.addEventListener('keydown', key); target.addEventListener('lostpointercapture', cancel);
   });

@@ -1,3 +1,4 @@
+import { inputTab, soundManagement } from './workspace-actions';
 import { test, expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { installAudioCapture } from './audio-capture';
@@ -15,7 +16,7 @@ async function start(page: Page, route = '/') { await page.goto(route); await ex
 async function records(page: Page, store: string) { return page.evaluate(async store => { const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('strudel-studio'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); return new Promise<any[]>((resolve, reject) => { const r = db.transaction(store).objectStore(store).getAll(); r.onsuccess = () => { resolve(r.result); db.close(); }; r.onerror = () => reject(r.error); }); }, store); }
 /** Runs a command palette entry by name, the route to project, export and settings actions. */
 async function command(page: Page, name: string) {
-  if (name === 'Import samples from GitHub or files') { await command(page, 'Open Sample Catalogue'); if (!await page.locator('.import-page-link').isVisible()) await page.locator('#add-sounds summary').click(); await page.locator('.import-page-link').click(); return; }
+  if (name === 'Import samples from GitHub or files') { await command(page, 'Open Sample Catalogue'); if (!await page.locator('.import-page-link').isVisible()) await soundManagement(page, 'Add sounds'); await page.locator('.import-page-link').click(); return; }
   if (name === 'Audio input settings') { await page.locator(await page.locator('#audio-settings').isVisible() ? '#audio-settings' : '#input-alert-settings').click(); return; }
   if (name === 'Recording settings') { await openRecordBar(page); await page.locator('#record-settings').click(); return; }
  await page.keyboard.press('Control+K'); await page.locator('#command-palette input').fill(name); await page.keyboard.press('Enter'); await expect(page.locator('#command-palette')).toBeHidden(); }
@@ -131,7 +132,7 @@ test('storage exhaustion preserves the saved project and draft, then retry succe
 test('composition edits, MIDI presets, and import-route themes remain usable', async ({ page }) => {
   await start(page); await page.locator('[data-drawer=composition]').click(); if (!await page.locator('#composition-content').isVisible()) await page.locator('[data-drawer=composition]').click();
   await page.locator('#snap').selectOption('0.25'); await page.getByRole('button', { name: 'Mute Track 1', exact: true }).click(); await expect(page.getByRole('button', { name: 'Unmute Track 1', exact: true })).toBeVisible(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser'); await page.reload(); await expect(page.locator('#snap')).toHaveValue('0.25'); expect((await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').tracks[0].muted).toBe(true);
-  await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click(); await page.locator('#instrument-apply').click(); await page.locator('#save-midi-preset').click(); await page.locator('#edit-name').fill('Starter keys'); await page.locator('#edit-dialog button[value=confirm]').click(); await expect.poll(async () => (await records(page, 'presets')).length).toBe(1);
+  await inputTab(page, 'midi'); await page.locator('#instrument-apply').click(); await page.locator('#save-midi-preset').click(); await page.locator('#edit-name').fill('Starter keys'); await page.locator('#edit-dialog button[value=confirm]').click(); await expect.poll(async () => (await records(page, 'presets')).length).toBe(1);
   await page.locator('#dark-mode').check(); await command(page, 'Import samples from GitHub or files'); await expect(page.locator('#sample-import-page')).toBeVisible(); expect(await page.locator('#sample-import-page').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(25, 29, 36)');
   await page.setViewportSize({ width: 390, height: 844 }); expect(await page.locator('#sample-import-page').evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy();
 });
@@ -149,7 +150,7 @@ test('catalogue is opt-in; install, sampled render, removal and reinstall retain
   const manifest = await mockStarter(page), remote: string[] = [];
   page.on('request', r => { if (r.url().startsWith('https://raw.githubusercontent.com/')) remote.push(r.url()); });
   await start(page); await command(page, 'Open Sample Catalogue');
-  await expect(page.locator('#catalogue-packs')).toContainText('Not installed'); expect(remote).toEqual([]);
+  await soundManagement(page, 'Manage packs'); await expect(page.locator('#catalogue-packs')).toContainText('Not installed'); expect(remote).toEqual([]);
   await page.getByRole('button', { name: 'Install pack', exact: true }).click();
   await expect(page.locator('#catalogue-packs')).toContainText('Installed in this browser'); expect(remote).toHaveLength(6);
   const before = (await records(page, 'assets')).map(a => a.id).sort(); expect(before).toEqual(manifest.assets.map((a: any) => a.id).sort());
@@ -157,7 +158,7 @@ test('catalogue is opt-in; install, sampled render, removal and reinstall retain
   await command(page, 'Export full song render');
   const download = page.waitForEvent('download'); await page.locator('#render-audio').click(); const file = await download;
   const rendered = decodeWav(await readFile((await file.path())!)); expect(rendered.rate).toBe(48000); expect(rendered.bits).toBe(24); expect(rendered.left.some(n => Math.abs(n) > .01)).toBeTruthy();
-  await command(page, 'Open Sample Catalogue'); await page.getByRole('button', { name: 'Remove pack', exact: true }).click();
+  await command(page, 'Open Sample Catalogue'); await soundManagement(page, 'Manage packs'); await page.getByRole('button', { name: 'Remove pack', exact: true }).click();
   await expect(page.locator('dialog[open]')).toContainText('Drum Basics'); await page.getByRole('button', { name: 'Remove downloaded pack', exact: true }).click();
   await expect.poll(async () => (await records(page, 'assets')).filter(a => a.missing).length).toBe(6);
   await page.getByRole('button', { name: 'Install pack', exact: true }).click(); await expect(page.locator('#catalogue-packs')).toContainText('Installed in this browser');
@@ -197,7 +198,7 @@ async function fakeInput(page: Page) {
 
 for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited effects once in tab playback and composition render`, async ({ page }) => {
   await installAudioCapture(page); await fakeInput(page); await start(page); await page.locator('#add-track').click();
-  await page.getByRole('tab', { name: 'Audio input', exact: true }).click(); await command(page, 'Audio input settings'); await page.locator('#audio-track').selectOption({ label: 'Track 3' }); await closeSheet(page);
+  await inputTab(page, 'audio'); await command(page, 'Audio input settings'); await page.locator('#audio-track').selectOption({ label: 'Track 3' }); await closeSheet(page);
   await page.locator('#editor .cm-content:visible').fill('AUDIO.gain(slider(0.25, 0, 1))'); await page.locator('#audio-apply').click();
   await page.locator('#audio-connect').click(); await expect(page.locator('#audio-state')).toContainText('Armed'); expect(await page.locator('#audio-monitor').isChecked()).toBe(false);
   await openRecordBar(page);  await command(page, 'Recording settings'); await page.locator('#record-mode').selectOption(mode); await closeSheet(page);
@@ -251,7 +252,7 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited
 });
 
 test('input drafts retain working processing; live input blocks export until explicitly excluded', async ({ page }) => {
-  await fakeInput(page); await start(page); await page.getByRole('tab', { name: 'Audio input', exact: true }).click();
+  await fakeInput(page); await start(page); await inputTab(page, 'audio');
   await page.locator('#editor .cm-content:visible').fill('AUDIO.gain(0.4)'); await page.locator('#audio-apply').click();
   await page.locator('#editor .cm-content:visible').fill('AUDIO.reverse()'); await page.locator('#audio-apply').click(); await expect(page.locator('#notice')).toContainText('Unsupported AUDIO modifier');
   await page.locator('#save-now').click(); expect((await records(page, 'projects'))[0].audioInput.appliedCode).toBe('AUDIO.gain(0.4)');
@@ -324,7 +325,7 @@ test('reload recovers an interrupted recording and effects testing keeps the sav
   await page.reload(); await expect(page.locator('#record-status')).toContainText('Recovered interrupted recording'); await openRecordBar(page); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('Interrupted recording saved');
   const take = (await records(page, 'assets')).find(a => a.recording?.mode === 'wet'); expect(take.recording.incomplete).toBe(true);
-  await page.getByRole('tab', { name: 'Audio input', exact: true }).click();
+  await inputTab(page, 'audio');
   await expect(page.locator('#audio-toolbar #audio-record')).toHaveCount(0);
   await page.locator('#editor .cm-content:visible').fill('AUDIO.gain(0.1).lpf(3000)'); await page.locator('#audio-apply').click();
   await command(page, 'Audio input settings'); await page.locator('#audio-test-take').selectOption(take.id); await page.evaluate(() => window.neonCapture.start()); await page.locator('#audio-test-play').click(); await page.waitForTimeout(300); await page.locator('#audio-test-stop').click();

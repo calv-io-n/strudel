@@ -1,3 +1,4 @@
+import { clipProperties } from './workspace-actions';
 import { test, expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { encodeWav, decodeWav } from '../shared/wav';
@@ -173,10 +174,11 @@ test('a single WAV placed on the timeline plays once and extending the clip adds
   await page.getByRole('button',{name:'Save and insert',exact:true}).click();await expect(page.locator(editor)).toBeHidden();
   await page.locator('#tabs [role=tab][aria-selected=true]').click({button:'right'});
   await page.getByRole('menuitem',{name:'Add to composition',exact:true}).click();
+  await clipProperties(page);
   await expect(page.locator('#clip-playback')).toHaveValue('once');
   await expect(page.locator('#clip-length')).toHaveValue('4');
-  await page.locator('#clip-length').fill('16');await page.locator('#clip-dialog button[value=save]').click();
-  await page.locator('[data-clip]').first().click();await page.locator('#clip-dialog button[value=duplicate]').click();
+  await page.locator('#clip-length').fill('16');await page.locator('#clip-form button[value=save]').click();
+  await page.locator('[data-clip]').first().click({button:'right'});await page.getByRole('menuitem',{name:'Duplicate',exact:true}).click();
   await expect(page.locator('[data-clip]')).toHaveCount(2);
   await page.evaluate(()=>{
     const stats=(window as any).takeAllocations={decodes:0,convolvers:0};
@@ -190,13 +192,13 @@ test('a single WAV placed on the timeline plays once and extending the clip adds
   expect(await page.evaluate(()=>(window as any).takeAllocations)).toEqual({decodes:1,convolvers:0});
   expect(Math.max(...captured.bins.slice(3).map(b=>b.peak))).toBeLessThan(.0001);
   await page.locator('#save-now').click();await page.reload();
-  await page.locator('[data-play-target=composition]').click();await page.locator('[data-clip]').first().click();
+  await page.locator('[data-play-target=composition]').click();await clipProperties(page);
   await expect(page.locator('#clip-playback')).toHaveValue('once');
-  await page.locator('#clip-playback').selectOption('pattern');await page.locator('#clip-dialog button[value=save]').click();
+  await page.locator('#clip-playback').selectOption('pattern');await page.locator('#clip-form button[value=save]').click();
   await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(4600);
   const repeated=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
   expect(repeated.bins[4].peak).toBeGreaterThan(.02);
-  await page.locator('[data-clip]').first().click();await page.locator('#clip-playback').selectOption('once');await page.locator('#clip-dialog button[value=save]').click();
+  await clipProperties(page);await page.locator('#clip-playback').selectOption('once');await page.locator('#clip-form button[value=save]').click();
   await page.locator('#save-now').click();await page.reload();await page.locator('[data-play-target=composition]').click();
   await page.evaluate(()=>{
     const decode=BaseAudioContext.prototype.decodeAudioData;

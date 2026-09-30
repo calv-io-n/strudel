@@ -1,3 +1,4 @@
+import { inputTab, clipProperties } from './workspace-actions';
 import { installAudioCapture } from './audio-capture';
 import { decodeWav } from '../shared/wav';
 import { test, expect, type Page } from '@playwright/test';
@@ -8,15 +9,15 @@ async function boot(page: Page) {
   expect(errors).toEqual([]);
 }
 async function command(page: Page, name: string) { await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill(name); await page.keyboard.press('Enter'); }
-const defaults = ['Open pattern tab', 'Open Sample Catalogue', 'MIDI & on-screen controller', 'Audio input', 'Export full song render…', 'Quick start guide', 'Import .strudel file…', 'Import GitHub Samples'];
-test('Search pins all eight workflows and closed-pattern selection has no duplicates', async ({ page }) => {
+const defaults = ['Open pattern tab', 'Open Sample Catalogue', 'MIDI & on-screen controller', 'Audio input', 'Export full song render…', 'Quick start guide', 'WAV editor', 'Import .strudel file…', 'Import GitHub Samples'];
+test('Search pins all core workflows and closed-pattern selection has no duplicates', async ({ page }) => {
   await boot(page); await page.locator('#palette-open').click();
-  expect((await page.locator('.palette-name').allTextContents()).slice(0, 8)).toEqual(defaults);
+  expect((await page.locator('.palette-name').allTextContents()).slice(0, defaults.length)).toEqual(defaults);
   await page.keyboard.press('Enter'); await expect(page.locator('.palette-empty')).toContainText('already open');
   await page.keyboard.press('Escape'); await page.getByRole('button', { name: 'Close Lead', exact: true }).click();
   await command(page, 'Open pattern tab'); await expect(page.locator('.palette-name')).toHaveText(['Open Lead']); await page.keyboard.press('Enter');
   await expect(page.getByRole('tab', { name: 'Lead', exact: true })).toHaveCount(1);
-  await page.reload(); await page.locator('#palette-open').click(); expect((await page.locator('.palette-name').allTextContents()).slice(0, 8)).toEqual(defaults);
+  await page.reload(); await page.locator('#palette-open').click(); expect((await page.locator('.palette-name').allTextContents()).slice(0, defaults.length)).toEqual(defaults);
   await page.locator('#command-palette input').fill('Sample Catalogue'); await expect(page.locator('.palette-name')).toHaveText(['Open Sample Catalogue']);
 });
 test('Search remains discoverable without device capabilities and opens settings without permission', async ({ page }) => {
@@ -30,7 +31,7 @@ test('outside gestures dismiss one overlay, retain edit drafts, and never click 
   const dialog = page.locator('#edit-dialog'); await expect(dialog).toBeVisible(); await page.locator('#edit-name').fill('Rhythm draft');
   const box = (await page.locator('#edit-name').boundingBox())!;
   await page.mouse.move(box.x + 20, box.y + 10); await page.mouse.down(); await page.mouse.move(2, 2); await page.mouse.up(); await expect(dialog).toBeVisible();
-  const play = (await page.locator('#play').boundingBox())!; await page.mouse.click(play.x + 5, play.y + 5); await expect(dialog).toBeHidden(); await expect(page.locator('#transport-state')).toContainText('Stopped');
+  const play = (await page.locator('#play:visible, #composition-play:visible').boundingBox())!; await page.mouse.click(play.x + 5, play.y + 5); await expect(dialog).toBeHidden(); await expect(page.locator('#transport-state')).toContainText('Stopped');
   await page.getByRole('tab', { name: 'Rhythm', exact: true }).dblclick(); await expect(page.locator('#edit-name')).toHaveValue('Rhythm draft'); await page.keyboard.press('Escape');
   await command(page, 'MIDI & on-screen controller'); await page.getByRole('button', { name: 'How to connect a MIDI keyboard' }).click();
   await expect(page.locator('#quick-start')).toBeVisible(); await page.mouse.click(2, 2); await expect(page.locator('#quick-start')).toBeHidden(); await expect(page.locator('#sheet')).toBeVisible();
@@ -92,7 +93,7 @@ test('MIDI instrument gain and filter knobs update both sliders and a held note'
     Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['instrument-knobs', input]]), onstatechange: null }) });
     (window as any).instrumentMessage = (bytes: number[]) => input.onmidimessage?.({ data: new Uint8Array(bytes), timeStamp: performance.now() });
   });
-  await boot(page); await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click();
+  await boot(page); await inputTab(page, 'midi');
   const content = page.locator('#editor-midi-instrument .cm-content');
   await content.fill('MIDI.s("sawtooth").gain(slider(0.5, 0, 1, 0.01)).lpf(slider(1000, 100, 5000, 50))');
   await page.locator('#instrument-apply').click();
@@ -125,7 +126,7 @@ test('supersaw gain and filter mappings follow slow stepped knob sweeps', async 
     Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['axiom', input]]), onstatechange: null }) });
     (window as any).turn = (cc: number, value: number) => input.onmidimessage?.({ data: new Uint8Array([176, cc, value]), timeStamp: performance.now() });
   });
-  await boot(page); await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click();
+  await boot(page); await inputTab(page, 'midi');
   const content = page.locator('#editor-midi-instrument .cm-content');
   await content.fill('MIDI.s("supersaw").orbit(8).gain(slider(0.95, 0.25, 2, 0.1)).delay(0.1).lpf(slider(500, 0, 3000, 25)).ribbon(1,2)');
   await page.locator('#instrument-apply').click(); await expect(page.locator('#instrument-state')).toHaveText('Ready for MIDI');
@@ -180,7 +181,7 @@ test('continuous metronome clicks after the lead-in and Stop silences it without
   await installAudioCapture(page); await boot(page);
   const content = page.locator('.tab-editor:not([hidden]) .cm-content'); await content.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End'); await page.keyboard.insertText('silence');
   await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click(); await page.locator('#count-in').click();
-  await page.locator('#play').click(); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
+  await page.locator('[data-play-target=tab]').click(); await page.locator('#play').click(); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
   await page.evaluate(() => window.neonCapture.start()); await page.waitForTimeout(1300); const playing = await page.evaluate(() => window.neonCapture.finish()); expect(playing.peak).toBeGreaterThan(.01);
   const wav = decodeWav(Buffer.from(playing.wav, 'base64')); const onsets: number[] = [];
   for (let i = 0; i < wav.left.length; i++) if (Math.abs(wav.left[i]) > .01 && (!onsets.length || i / wav.rate - onsets.at(-1)! > .15)) onsets.push(i / wav.rate);
@@ -209,13 +210,14 @@ test('starter display name updates without replacing edited music or user-rename
   await page.locator('#project-name').fill('My Neon remix'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser'); await page.reload(); await expect(page.locator('#project-name')).toHaveValue('My Neon remix');
 });
 
-test('transient menus, new-pattern drafts and native clip/color dialogs share outside dismissal', async ({ page }) => {
+test('transient menus, new-pattern drafts and clip properties and color dialogs respect their dismissal behavior', async ({ page }) => {
   await boot(page); await page.locator('#new-tab').click(); await page.locator('#new-pattern-name').fill('Pending idea'); await page.mouse.click(5, 70); await expect(page.locator('#new-pattern')).toBeHidden();
   await page.locator('#new-tab').click(); await expect(page.locator('#new-pattern-name')).toHaveValue('Pending idea'); await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: 'Rhythm', exact: true }).click({ button: 'right' }); await expect(page.locator('.context-menu')).toBeVisible(); await page.mouse.click(5, 70); await expect(page.locator('.context-menu')).toBeHidden();
   await page.getByRole('tab', { name: 'Rhythm', exact: true }).click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Color…', exact: true }).click(); await expect(page.getByRole('dialog', { name: 'Color for Rhythm' })).toBeVisible(); await page.mouse.click(2, 2); await expect(page.getByRole('dialog', { name: 'Color for Rhythm' })).toHaveCount(0);
-  await page.locator('[data-clip]').first().click(); await expect(page.locator('#clip-dialog')).toBeVisible(); const original = await page.locator('#clip-length').inputValue(); await page.locator('#clip-length').fill('7'); await page.mouse.click(2, 2); await expect(page.locator('#clip-dialog')).toBeHidden();
-  await page.locator('[data-clip]').first().click(); await expect(page.locator('#clip-length')).toHaveValue('7'); await page.keyboard.press('Escape');
+  await clipProperties(page); const original = await page.locator('#clip-length').inputValue();
+  await page.locator('#clip-length').fill('7'); await page.mouse.click(2, 2); await expect(page.locator('#clip-properties')).toBeVisible();
+  await page.locator('#clip-properties-close').click(); await clipProperties(page); await expect(page.locator('#clip-length')).toHaveValue(original); await page.keyboard.press('Escape');
   await command(page, 'Delete session'); await expect(page.locator('#edit-dialog')).toBeVisible(); await page.mouse.click(2, 2); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); expect(original).not.toBe('7');
   await command(page, 'Open Sample Catalogue'); await expect(page.locator('#sounds-panel')).toBeVisible(); await page.mouse.click(2, 2); await expect(page.locator('#sounds-panel')).toBeHidden();
 });
