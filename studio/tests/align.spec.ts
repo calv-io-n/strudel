@@ -67,8 +67,14 @@ test('pace presets, the bars field, start at first attack and the timeline pace 
  await dialog.locator('[data-apply]').click();await expect(dialog).not.toBeVisible({timeout:20000});await page.locator('#save-now').click();
  await expect.poll(async()=>(await saved(page)).clips.find((c:any)=>c.id==='voice-clip').anchors?.[0].source).toBeGreaterThan(.4);expect((await saved(page)).clips.find((c:any)=>c.id==='voice-clip').length).toBe(2);
  await page.locator('[data-clip="other-clip"]').click({button:'right'});await page.getByRole('menuitem',{name:'Pace: half time'}).click();await expect(page.locator('[data-clip="other-clip"]')).toContainText('16 beats');await expect(page.locator('[data-clip="other-clip"]')).toContainText('Aligned');
+ await page.locator('#snap').selectOption('1');await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
+ // Audition the half-time clip itself, then measure individual tone windows so
+ // silence and phase differences between stretched attacks cannot cancel out.
+ await page.locator('#seek-handle').focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');await expect(page.locator('#seek-handle')).toHaveAttribute('aria-valuenow','5');await page.keyboard.press('ArrowRight');await expect(page.locator('#seek-handle')).toHaveAttribute('aria-valuenow','9');
  await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(2500);await page.locator('#composition-stop').click();const capture=await page.evaluate(()=>window.neonCapture.finish());expect(capture.peak).toBeGreaterThan(.03);
- const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));expect(tone220(audio.left,audio.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
+ const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64'))),windowFrames=Math.round(audio.rate*.1);let peak220=0;
+ for(let start=0;start+windowFrames<=audio.left.length;start+=windowFrames)peak220=Math.max(peak220,tone220(audio.left.subarray(start,start+windowFrames),audio.rate));
+ expect(peak220).toBeGreaterThan(.03);expect(errors).toEqual([]);
 });
 test('seeking into an audio clip during playback keeps the sample audible',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await setup(page);

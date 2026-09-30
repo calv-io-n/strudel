@@ -182,6 +182,7 @@ test('MIDI recovery reopens the shared bar and discard leaves original code inta
   await midi(page); await replaceBody(page, 'note("c4").s("triangle")');
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop:visible, #composition-stop:visible').click();
+  await expect.poll(async () => (await midiRecovery(page))?.notes.filter((n: any) => n.end !== undefined).length).toBe(1);
   await page.reload(); await expect(page.locator('#record-bar')).toBeVisible(); await expect(page.locator('.performance-panel [data-state]')).toContainText('Recovered');
   await page.locator('.performance-panel [data-discard]').click(); await expect(page.locator('.pending-code')).toHaveCount(0);
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('note("c4")');
