@@ -1,3 +1,4 @@
+import { inputTab, liveSound } from './workspace-actions';
 import { test, expect, type Page } from '@playwright/test';
 
 async function boot(page: Page, names = ['Keys']) {
@@ -17,7 +18,7 @@ async function boot(page: Page, names = ['Keys']) {
   await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
 }
 async function recordBar(page: Page) { await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click(); }
-async function editor(page:Page) { await page.getByRole('tab',{name:'MIDI instrument',exact:true}).click(); }
+async function editor(page:Page) { await inputTab(page, 'midi'); }
 
 test('connect once beside recording; instrument, settings and hotplug share the connection', async ({page}) => {
   await boot(page); await recordBar(page);
@@ -68,7 +69,7 @@ test('recording shows status then resolves to highlighted review code', async ({
   await page.evaluate(() => (window as any).midiFixture.note()); await page.waitForTimeout(220); await page.evaluate(() => (window as any).midiFixture.note(67,false));
   await expect(ghosts.filter({hasText:'note(67)'})).toHaveCount(0);
   await ghosts.last().scrollIntoViewIfNeeded(); await page.screenshot({path:'/tmp/native-code-forming.png'});
-  await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
+  await page.locator('#stop:visible, #composition-stop:visible').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
   await expect(ghosts.locator('.code-placeholder')).toHaveCount(0); await expect(page.locator('.creating-code')).toHaveCount(0);
   const style = await ghosts.first().evaluate(el => {const a=getComputedStyle(el), b=getComputedStyle(el.closest('.cm-content')!);return [a.fontFamily,a.fontSize,b.fontFamily,b.fontSize];});
   expect(style.slice(0,2)).toEqual(style.slice(2)); expect(await ghosts.first().locator('span[class]').count()).toBeGreaterThan(2);
@@ -86,14 +87,14 @@ test('recording shows status then resolves to highlighted review code', async ({
 
 test('reduced motion keeps the creating-code placeholders still', async ({page}) => {
   await page.emulateMedia({reducedMotion:'reduce'}); await boot(page); await recordBar(page); await page.locator('#record-toggle').click();
-  await expect(page.locator('.pending-code').first()).toBeVisible(); await expect(page.locator('.code-placeholder')).toHaveCount(0); await page.locator('#stop').click();
+  await expect(page.locator('.pending-code').first()).toBeVisible(); await expect(page.locator('.code-placeholder')).toHaveCount(0); await page.locator('#stop:visible, #composition-stop:visible').click();
 });
 
 
 test('phrase testing and knob binding offer connection at the point of use', async ({page}) => {
   await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('#record-toggle').click();
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem',{name:'Test MIDI',exact:true}).click();
-  await expect(page.locator('#midi-editor-connection [data-midi-enable]')).toBeVisible(); await page.locator('#stop').click();
+  await expect(page.locator('#midi-editor-connection [data-midi-enable]')).toBeVisible(); await page.locator('#stop:visible, #composition-stop:visible').click();
   const slider = page.locator('.tab-editor:not([hidden]) [data-input-function=slider]').first(); await slider.click(); await page.getByRole('menuitem',{name:'Bind MIDI control',exact:true}).click();
   await page.locator('#midi-learning [data-midi-enable]').click(); await expect(page.locator('#midi-learning [data-midi-status]')).toHaveText('MIDI · Keys');
   await page.evaluate(() => (window as any).midiFixture.cc()); await expect(page.locator('#midi-learning')).toBeHidden(); await expect(slider).toHaveClass(/input-assigned/);
@@ -101,7 +102,7 @@ test('phrase testing and knob binding offer connection at the point of use', asy
 
 test('sound preview connects MIDI in the catalogue without navigating away', async ({page}) => {
   await boot(page); await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill('Open Sample Catalogue'); await page.keyboard.press('Enter');
-  await page.locator('[data-live-sound="triangle"]').click(); await page.locator('#library-midi-connection [data-midi-enable]').click();
+  await liveSound(page, 'triangle'); await page.locator('#library-midi-connection [data-midi-enable]').click();
   await expect(page.locator('#sounds-panel')).toBeVisible(); await expect(page.locator('#library-midi-connection [data-midi-status]')).toHaveText('MIDI · Keys');
   await page.evaluate(() => (window as any).midiFixture.note()); await expect(page.locator('#library-midi-status')).toContainText('MIDI 67');
   await page.locator('#library-midi-connection [data-midi-screen]').click(); await expect(page.locator('#library-keys button').first()).toBeFocused();

@@ -39,6 +39,9 @@ function top() {
 }
 function inside(surface: Surface, event: PointerEvent | MouseEvent) {
   if (!surface.root.contains(event.target as Node)) return false;
+  // Popovers can position their descendants outside the owning element's box.
+  // Only a native dialog needs a geometry check for events on its backdrop.
+  if (!(surface.root instanceof HTMLDialogElement)) return true;
   // Native dialog backdrop events target the dialog itself, including outside its bounds.
   const rect = surface.root.getBoundingClientRect();
   return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
