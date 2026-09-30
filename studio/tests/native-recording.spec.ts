@@ -36,13 +36,14 @@ test('connect once beside recording; instrument, settings and hotplug share the 
   await expect(page.locator('#midi-editor-connection [data-midi-status]')).toHaveText('MIDI · Keys');
 });
 
-test('multiple inputs connect directly from the same chooser without a second Connect step', async ({page}) => {
+test('the chooser connects one controller and Change device replaces it without a second Connect step', async ({page}) => {
   await boot(page, ['Keys','Pads']); await editor(page); const root = page.locator('#midi-editor-connection');
   await root.locator('[data-midi-enable]').click(); await expect(root.locator('[data-midi-status]')).toHaveText('Choose your MIDI input.');
-  await root.getByRole('checkbox',{name:'Keys Connect',exact:true}).check(); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Keys');
-  await root.getByRole('checkbox',{name:'Pads Connect',exact:true}).check(); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Keys, Pads');
-  await root.getByRole('checkbox',{name:'Keys Connected',exact:true}).uncheck(); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Pads');
-  await root.getByRole('checkbox',{name:'Pads Connected',exact:true}).uncheck(); await expect(root.locator('[data-midi-status]')).toHaveText('Choose your MIDI input.');
+  await root.getByRole('combobox',{name:'MIDI controller'}).selectOption({label:'Keys'}); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Keys');
+  await root.getByRole('button',{name:'Change device'}).click();
+  await root.getByRole('combobox',{name:'MIDI controller'}).selectOption({label:'Pads'}); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Pads');
+  await root.getByRole('button',{name:'Change device'}).click();
+  await root.getByRole('combobox',{name:'MIDI controller'}).selectOption(''); await expect(root.locator('[data-midi-status]')).toHaveText('Choose your MIDI input.');
   expect(await page.evaluate(() => (window as any).midiFixture.calls)).toBe(1);
 });
 

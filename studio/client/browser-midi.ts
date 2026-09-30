@@ -27,6 +27,11 @@ class BrowserMidi {
     this.emit({ type: 'status', ...this.status });
   }
   async connections() { return { ports: this.selected }; }
+  async select(port: string | undefined) {
+    const selected = port ? [port] : [];
+    await exclusive(async () => { await write([{ collection: 'settings', key: 'midi-connections', value: selected }]); this.selected = selected; });
+    this.emit({ type: 'midi-connections', ports: this.selected }); if (this.access) this.refresh();
+  }
   async connect(input: { port: string; connected: boolean }) {
     await exclusive(async () => { const current = await read<string[]>('settings', 'midi-connections') ?? []; this.selected = [...new Set(input.connected ? [...current, input.port] : current.filter(p => p !== input.port))]; await write([{ collection: 'settings', key: 'midi-connections', value: this.selected }]); });
     this.emit({ type: 'midi-connections', ports: this.selected }); if (this.access) this.refresh(); return { ports: this.selected };

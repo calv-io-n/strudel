@@ -211,7 +211,7 @@ test('a single WAV placed on the timeline plays once and extending the clip adds
   await page.waitForFunction(()=>typeof (window as any).releaseTakeDecode==='function');
   await page.locator('#composition-stop').click();await page.evaluate(()=>(window as any).releaseTakeDecode());
   await expect(page.locator('#composition-play')).toBeEnabled();
-  await expect(page.locator('#transport-state')).toContainText('Stopped');
+  await expect(page.locator('#transport-state')).toContainText('Ready');
 
 });
 

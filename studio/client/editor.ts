@@ -231,7 +231,13 @@ export class StudioEditor {
     this.view.dom.querySelectorAll<HTMLElement>('.inline-slider').forEach((el) => el.classList.toggle('selected', el.dataset.sliderId === this.selected));
   }
   refresh() { this.view.dispatch({ effects: this.changeWidgets.of(this.sliders) }); this.markSelected(); }
-  get code() { return this.view.state.doc.toString(); }
+  private cachedDocument?: EditorState['doc'];
+  private cachedCode = '';
+  get code() {
+    const doc = this.view.state.doc;
+    if (doc !== this.cachedDocument) { this.cachedDocument = doc; this.cachedCode = doc.toString(); }
+    return this.cachedCode;
+  }
   get anchors() { return this.sliders.map(({ id, from, fingerprint }) => ({ id, from, fingerprint })); }
   setValue(id: string, value: number) { return this.setValues(new Map([[id, value]])); }
   setValues(values: Map<string, number>) {

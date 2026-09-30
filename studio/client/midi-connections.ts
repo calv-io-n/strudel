@@ -13,13 +13,13 @@ export class MidiConnections {
   mount(label: string, onScreen = this.onScreen) {
     const root = document.createElement('section'); root.className = 'midi-connection'; root.setAttribute('aria-label', label);
     const view = { root, expanded: false }; this.views.push(view);
-    root.innerHTML = '<div class="midi-connection-row"><span data-midi-status role="status"></span><span data-midi-activity class="hint"></span><button data-midi-enable>Connect MIDI</button><button data-midi-devices class="bare" aria-expanded="false" hidden>Devices</button><button data-midi-screen class="bare">On-screen keys</button></div><div data-midi-inputs hidden></div>';
+    root.innerHTML = '<div class="midi-connection-row"><span data-midi-status role="status"></span><span data-midi-activity class="hint"></span><button data-midi-enable>Connect controller</button><button data-midi-devices class="bare" aria-expanded="false" hidden>Change device</button><button data-midi-screen class="bare">On-screen keys</button></div><div data-midi-inputs hidden></div>';
     root.querySelector<HTMLButtonElement>('[data-midi-enable]')!.onclick = () => void this.enable();
     root.querySelector<HTMLButtonElement>('[data-midi-devices]')!.onclick = () => { view.expanded = !view.expanded; this.render(); };
     root.querySelector<HTMLButtonElement>('[data-midi-screen]')!.onclick = onScreen;
     root.querySelector('[data-midi-inputs]')!.addEventListener('change', event => {
       const input = event.target as HTMLInputElement;
-      if (input.dataset.midiPort) void this.connect(input.dataset.midiPort, input.checked);
+      if (input.matches('[data-midi-choice]')) void this.connect(input.value, true);
     });
     this.render(); return root;
   }
@@ -38,7 +38,7 @@ export class MidiConnections {
     this.busy = true; this.error = ''; this.render();
     try {
       const status = await browserMidi.enable();
-      if (status.ports.length === 1 && !this.selected.length) await browserMidi.connect({ port: status.ports[0], connected: true });
+      if (status.ports.length === 1 && !this.selected.length) await browserMidi.select(status.ports[0]);
       this.waitingForDevice = status.ports.length === 0 && !this.selected.length;
       this.views.forEach(view => { view.expanded = status.ports.length > 1 && !this.selected.length; });
       this.changed();
@@ -47,7 +47,7 @@ export class MidiConnections {
   }
   private async connect(port: string, connected: boolean) {
     this.busy = true; this.error = ''; this.waitingForDevice = false; this.render();
-    try { await browserMidi.connect({ port, connected }); this.changed(); }
+    try { await browserMidi.select(connected && port ? port : undefined); this.views.forEach(view => { view.expanded = false; }); this.changed(); }
     catch (error) { this.error = (error as Error).message; }
     finally { this.busy = false; this.update(this.status, this.selected); }
   }
@@ -60,27 +60,29 @@ export class MidiConnections {
       root.querySelector('[data-midi-status]')!.textContent = text;
       root.dataset.connected = String(connected.length > 0);
       const enable = root.querySelector<HTMLButtonElement>('[data-midi-enable]')!;
-      enable.hidden = this.status.ready && !this.error; enable.disabled = this.busy || !supported; enable.textContent = this.error ? 'Retry MIDI connection' : 'Connect MIDI';
+      enable.hidden = this.status.ready && !this.error; enable.disabled = this.busy || !supported; enable.textContent = this.error ? 'Retry MIDI connection' : 'Connect controller';
       const devices = root.querySelector<HTMLButtonElement>('[data-midi-devices]')!;
       devices.hidden = !this.status.ready || !this.status.ports.length && !this.selected.length;
       const expanded = view.expanded || this.status.ready && !connected.length;
       devices.setAttribute('aria-expanded', String(expanded));
       const inputs = root.querySelector<HTMLElement>('[data-midi-inputs]')!; inputs.hidden = !expanded;
       const ports = [...new Set([...this.status.ports, ...this.selected])];
-      const existing = new Map([...inputs.querySelectorAll<HTMLInputElement>('[data-midi-port]')].map(input => [input.dataset.midiPort!, input]));
-      for (const [port, input] of existing) if (!ports.includes(port)) input.parentElement!.remove();
-      for (const port of ports) {
-        let input = existing.get(port);
-        if (!input) {
-          const label = document.createElement('label'); label.className = 'midi-device-option';
-          input = document.createElement('input'); input.type = 'checkbox'; input.dataset.midiPort = port;
-          const name = document.createElement('span'); name.textContent = this.name(port); name.title = port;
-          const state = document.createElement('small'); label.append(input, name, state); inputs.append(label);
-        }
-        if (!this.busy) input.checked = this.selected.includes(port);
-        input.disabled = this.busy;
-        input.parentElement!.querySelector('small')!.textContent = connected.includes(port) ? 'Connected' : this.selected.includes(port) ? 'Waiting for device' : 'Connect';
+      let choice = inputs.querySelector<HTMLSelectElement>('[data-midi-choice]');
+      if (!choice) {
+        const label = document.createElement('label'); label.className = 'midi-device-option';
+        const name = document.createElement('span'); name.textContent = 'Controller';
+        choice = document.createElement('select'); choice.dataset.midiChoice = ''; choice.setAttribute('aria-label', 'MIDI controller');
+        label.append(name, choice); inputs.append(label);
       }
+      const signature = JSON.stringify([ports, this.status.ports]);
+      if (choice.dataset.ports !== signature) {
+        choice.replaceChildren(new Option('No controller', ''));
+        for (const port of ports) choice.add(new Option(this.name(port) + (this.status.ports.includes(port) ? '' : ' (disconnected)'), port));
+        choice.dataset.ports = signature;
+      }
+      choice.value = this.selected[0] ?? '';
+      choice.disabled = this.busy;
+
     }
   }
 }

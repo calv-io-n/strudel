@@ -15,7 +15,8 @@
     "setup:browser-tests": "playwright install chromium",
     "studio:docs": "node scripts/build-strudel-docs.mjs",
     "studio:preview": "vite preview --config studio/vite.config.ts",
-    "studio:starters": "node --import tsx scripts/build-starters.ts"
+    "studio:starters": "node --import tsx scripts/build-starters.ts",
+    "studio:profile": "node --import tsx scripts/profile-studio.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
@@ -25,7 +26,8 @@
     "fake-indexeddb": "^6.2.5",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "source-map-js": "^1.2.1"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

@@ -73,5 +73,14 @@ export function registerOverlay(root: HTMLElement, dismiss: () => void, open = (
     const surface = top(); if (!surface) return;
     event.preventDefault(); event.stopImmediatePropagation(); surface.dismiss(); refresh();
   }, true);
-  new MutationObserver(refresh).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'open'] });
+  new MutationObserver(records => {
+    // Transport text, meters, and MIDI logs cannot open an overlay. Only inspect
+    // surface visibility changes or newly inserted dialogs.
+    const relevant = records.some(record => record.type === 'attributes'
+      ? surfaces.some(surface => surface.root === record.target)
+      : [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element && (
+        node.matches('dialog') || node.querySelector('dialog') || surfaces.some(surface => node === surface.root || node.contains(surface.root))
+      )));
+    if (relevant) refresh();
+  }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'open'] });
 }

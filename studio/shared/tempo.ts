@@ -13,8 +13,26 @@ export function tempoHeader(bpm: number, override?: number) {
 export function headerEnd(code: string) {
   return code.match(/^\/\/ Tempo: [^\n]*controlled by project BPM[^\n]*\nsetcpm\([^\n]*\)\n/)?.[0].length ?? 0;
 }
+const tempoCache = new Map<string, { changes: ChangeSet; code: string; complex: boolean }>();
+let tempoCacheCharacters = 0;
 /** Preserve non-tempo code and map anchors through narrowly scoped replacements. */
 export function reconcileTempo(code: string, bpm: number, override?: number) {
+  const key = `${bpm}:${override ?? ''}:${code}`;
+  const cached = tempoCache.get(key);
+  if (cached) return cached;
+  const result = reconcileTempoUncached(code, bpm, override);
+  const size = key.length + result.code.length;
+  if (size <= 2_000_000) {
+    while (tempoCache.size >= 128 || tempoCacheCharacters + size > 2_000_000) {
+      const oldest = tempoCache.keys().next().value!;
+      tempoCacheCharacters -= oldest.length + tempoCache.get(oldest)!.code.length;
+      tempoCache.delete(oldest);
+    }
+    tempoCache.set(key, result); tempoCacheCharacters += size;
+  }
+  return result;
+}
+function reconcileTempoUncached(code: string, bpm: number, override?: number) {
   const end = headerEnd(code), changes: { from: number; to: number; insert: string }[] = [];
   const header = tempoHeader(bpm, override);
   if (code.slice(0, end) !== header) changes.push({ from: 0, to: end, insert: header });
@@ -29,7 +47,7 @@ export function reconcileTempo(code: string, bpm: number, override?: number) {
     changes.push({ from: statement.from, to: statement.to, insert: original.split('\n').map(line => `// Previous tempo: ${line}`).join('\n') });
   } });
   const set = ChangeSet.of(changes, code.length);
-  return { changes: set, code: set.apply(Text.of(code.split('\n'))).toString(), complex };
+  return { changes: set, code: changes.length ? set.apply(Text.of(code.split('\n'))).toString() : code, complex };
 }
 export function normalizeTabTempo(tab: Tab, bpm: number): Tab {
   const result = reconcileTempo(tab.code, bpm, tab.tempoBpm);

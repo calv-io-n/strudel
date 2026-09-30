@@ -7,12 +7,13 @@ import {installAudioCapture} from './audio-capture';
 const id='99999999-9999-4999-a999-999999999999';
 async function saved(page:Page){return page.evaluate(async()=>{const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('strudel-studio',2);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});return await new Promise<any>((resolve,reject)=>{const r=db.transaction('projects').objectStore('projects').get('Vocal-align-restored');r.onsuccess=()=>{db.close();resolve(r.result);};r.onerror=()=>reject(r.error);});});}
 function tone220(values:Float32Array,rate:number){let real=0,imag=0;for(let i=0;i<values.length;i++){real+=values[i]*Math.cos(2*Math.PI*220*i/rate);imag+=values[i]*Math.sin(2*Math.PI*220*i/rate);}return 2*Math.hypot(real,imag)/values.length;}
-async function setup(page:Page){
+async function setup(page:Page, aligned = false){
  await page.addInitScript(()=>localStorage.setItem('studio.quick-start.opt-out','true'));await installAudioCapture(page);
  const samples=new Float32Array(192000);for(const second of [.5,1.5,2.5])for(let i=0;i<20000;i++)samples[Math.round(second*48000)+i]=.3*Math.sin(2*Math.PI*220*i/48000)*Math.min(1,i/200)*Math.min(1,(20000-i)/500);
  const wav=new Uint8Array(encodeWav(samples,samples,48000,{format:'float32'}).buffer),project=newProject();project.name='Vocal align';project.sessionId='Vocal-align';project.bpm=120;
  project.tabs=[{id:'voice',name:'Vocal',code:tempoHeader(120)+`s("studio_${id.replaceAll('-','')}").slow(2).gain(.7)`,anchors:[],color:'blue'},{id:'beat',name:'Beat',code:tempoHeader(120)+'note("48*4").s("sine").decay(.06).sustain(0).gain(.1)',anchors:[],color:'orange'}];project.activeTabId='voice';project.assetIds=[id];
  project.clips=[{id:'voice-clip',tabId:'voice',trackId:project.tracks[0].id,start:0,length:2,takeId:id,playback:'once',muted:false},{id:'other-clip',tabId:'voice',trackId:project.tracks[0].id,start:2,length:2,takeId:id,playback:'once',muted:false},{id:'beat-clip',tabId:'beat',trackId:project.tracks[1].id,start:0,length:4,muted:false}];
+ if (aligned) project.clips[0].anchors = [{source:0,beat:0},{source:4,beat:4}];
  const asset=AssetSchema.parse({id,provider:'upload',format:'wav',label:'Vocal phrase',duration:4,createdAt:new Date().toISOString()});
  const zip=zipSync({'project.json':strToU8(JSON.stringify(project)),[`assets/${id}.json`]:strToU8(JSON.stringify(asset)),[`assets/${id}.wav`]:wav});
  await page.goto('/');await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');await page.locator('#backup-file').setInputFiles({name:'vocal.zip',mimeType:'application/zip',buffer:Buffer.from(zip)});await expect(page.locator('#saved-projects')).toHaveValue('Vocal-align-restored');await page.locator('[data-play-target=composition]').click();
@@ -43,7 +44,10 @@ test('manual anchors, invalid stretches and cancellation leave the composition i
  await dialog.locator('[data-cancel]').click();expect((await saved(page)).clips).toEqual(before.clips);
 });
 test('Smart snap places attacks on the grid, fitting sets the clip length, and a tempo change re-renders',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await setup(page);await open(page);const dialog=page.locator('.align-dialog');
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await setup(page);
+ // Isolate the fitted sample: the accompaniment intentionally continues after it ends.
+ await page.getByRole('button',{name:'Mute Track 2',exact:true}).click();
+ await open(page);const dialog=page.locator('.align-dialog');
  await dialog.locator('[data-snap]').click();await expect(dialog.locator('[data-status]')).toContainText('3 attacks snapped');await expect(dialog.locator('.align-anchor.active')).toHaveCount(4);
  await dialog.locator('[data-fit-bars]').fill('1');await dialog.locator('[data-fit]').click();await expect(dialog.locator('.align-anchor.active')).toHaveCount(2);await expect(dialog.locator('[data-summary]')).toContainText('4 beats');
  await dialog.locator('[data-apply]').click();await expect(dialog).not.toBeVisible({timeout:20000});await page.locator('#save-now').click();
@@ -51,7 +55,7 @@ test('Smart snap places attacks on the grid, fitting sets the clip length, and a
  await expect(page.locator('[data-clip="voice-clip"] [data-clip-waveform]')).toHaveAttribute('data-ready','true');
  await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(2800);await page.locator('#composition-stop').click();const capture=await page.evaluate(()=>window.neonCapture.finish());expect(capture.peak).toBeGreaterThan(.03);
  const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));const first=audio.left.findIndex(v=>Math.abs(v)>.001);expect(tone220(audio.left.subarray(first,first+audio.rate*2),audio.rate)).toBeGreaterThan(.01);expect(Math.max(...audio.left.slice(first+Math.round(audio.rate*2.3)).map(Math.abs))).toBeLessThan(.001);
- await page.locator('#bpm').fill('100');await page.keyboard.press('Tab');await expect(page.locator('#bpm')).toHaveValue('100');
+ await page.locator('#bpm').fill('100');await page.keyboard.press('Tab');await expect(page.locator('#bpm')).toHaveValue('100');await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
  await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(3000);await page.locator('#composition-stop').click();const retimed=await page.evaluate(()=>window.neonCapture.finish());expect(retimed.peak).toBeGreaterThan(.03);const again=decodeWav(new Uint8Array(Buffer.from(retimed.wav,'base64')));expect(tone220(again.left,again.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
 });
 test('pace presets, the bars field, start at first attack and the timeline pace shortcut keep pitch and snap to bars',async({page})=>{
@@ -74,4 +78,25 @@ test('seeking into an audio clip during playback keeps the sample audible',async
  await page.mouse.click(ruler!.x+180+32,ruler!.y+ruler!.height/2); // seek back to cycle 0.5: the burst at 1.5 s sounds half a second later only if the take retriggers
  await page.waitForTimeout(1000);const capture=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
  const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));expect(tone220(audio.left,audio.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
+});
+
+for (const aligned of [false, true]) test('session audio is decoded before Play and reused when playback starts · aligned=' + aligned, async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).audioDecodes = 0;
+    const decode = BaseAudioContext.prototype.decodeAudioData;
+    BaseAudioContext.prototype.decodeAudioData = function (...args: Parameters<typeof decode>) {
+      (window as any).audioDecodes++;
+      return Reflect.apply(decode, this, args);
+    };
+  });
+  await setup(page, aligned);
+  await expect.poll(() => page.evaluate(() => (window as any).audioDecodes)).toBeGreaterThan(0);
+  await expect(page.locator('.clip[data-playback=playing]')).toHaveCount(0);
+  // Let the short fixture's background decode and waveform jobs settle.
+  await page.waitForTimeout(500);
+  const prepared = await page.evaluate(() => (window as any).audioDecodes);
+  await page.locator('#composition-play').click();
+  await expect(page.locator('.clip[data-playback=playing]')).not.toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).audioDecodes)).toBe(prepared);
+  await page.locator('#composition-stop').click();
 });

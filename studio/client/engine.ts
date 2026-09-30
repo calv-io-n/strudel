@@ -1,3 +1,6 @@
+import { assetReferences } from '../shared/asset-references';
+import { soundBindings } from '../shared/sound-bindings';
+import { playbackStart, includedClips, activeClips } from '../shared/playback-scope';
 import { replaceBinding } from '../shared/sound-bindings';
 import { singleSampleId } from '../shared/sample-placement';
 import { installPreciseQueries } from '../shared/pattern-time';
@@ -5,7 +8,7 @@ import { localSampleId } from '../shared/local-samples';
 import { optimizeRecordedMidi } from '../shared/optimize-midi';
 import { CountIn } from './count-in';
 import { tempoRate } from '../shared/tempo';
-import { releaseTakeSounds, prepareTake, takePattern, takeTabClip } from './take-playback';
+import { preloadTake, clearPreparedTakes, releaseTakeSounds, prepareTake, takePattern, takeTabClip } from './take-playback';
 import { clipAnchors, renderKey, validateAnchors } from '../shared/clip-timing';
 import { asset as storedAsset, audioBlob } from './storage/workspace';
 import { sampleUrl, releaseSampleUrls } from './storage/workspace';
@@ -46,7 +49,7 @@ export class Engine {
     }
     return this.refreshPerformanceValues({ ...this.liveEffects.wrap(hap.value, controls), studioPerformanceControls: controls }, this.editorFor(MIDI_EDITOR));
   }
-  async applyInstrument(code = instrumentFor(this.project()).code) {
+  async applyInstrument(code = instrumentFor(this.project()).code, prepareOnly = false) {
     if (this.compilingBusy) throw new Error('Wait for the current compilation.');
     this.compilingBusy = true;
     const owner = this.editorFor(MIDI_EDITOR);
@@ -72,9 +75,13 @@ export class Engine {
         }
       }
       if (epoch !== this.epoch) throw new Error('The session changed during compilation. Apply again.');
+      const activate = () => {
       if (this.instrumentPattern) { this.releaseInputNotes(); this.instrumentAudio.silence(); }
       this.instrumentPattern = pattern; this.instrumentInput = input;
       this.instrumentError = '';
+      };
+      if (prepareOnly) return activate;
+      activate();
     } catch (error) { this.instrumentError = (error as Error).message; throw error; }
     finally {
       this.compiling = undefined; this.instrumentCompileSliders = undefined; this.compilingBusy = false;
@@ -84,7 +91,7 @@ export class Engine {
   }
   async prepareInstrument() {
     if (!this.instrumentPattern) {
-      this.instrumentPreparation ??= this.applyInstrument(instrumentFor(this.project()).appliedCode).finally(() => { this.instrumentPreparation = undefined; });
+      this.instrumentPreparation ??= this.applyInstrument(instrumentFor(this.project()).appliedCode).then(() => {}).finally(() => { this.instrumentPreparation = undefined; });
       await this.instrumentPreparation;
     }
   }
@@ -266,6 +273,7 @@ export class Engine {
   private compiling?: StudioEditor;
   private compilingBusy = false;
   private compositionCompile = false;
+  private preparingTarget?: string;
   private mutes = new MuteTimeline();
   pendingMuteCycle: number | undefined;
   updateMutes() {
@@ -403,15 +411,14 @@ export class Engine {
     const position = this.transportStart + this.cycle;
     return this.transport.loop && position >= this.transport.begin ? this.transport.begin + ((position - this.transport.begin) % (this.transport.end - this.transport.begin) + this.transport.end - this.transport.begin) % (this.transport.end - this.transport.begin) : (this.recordingTransport ? position : Math.min(position, this.arrangementLength));
   }
-  private timelinePattern(pattern: Pattern) {
+  private timelinePattern(pattern: Pattern, length = this.arrangementLength) {
     const t = this.transport;
-    return transportPattern(pattern, this.transportStart, t.begin, t.loop ? t.end : this.recordingTransport ? 8192 : this.arrangementLength, t.loop);
+    return transportPattern(pattern, this.transportStart, t.begin, t.loop ? t.end : this.recordingTransport ? 8192 : length, t.loop);
   }
   async playComposition(countIn = false, fromBeginning = false) {
     if (this.busy) return;
     const t = this.transport;
-    if (!fromBeginning && t.loop && (t.position < t.begin || t.position >= t.end)) t.position = t.begin;
-    if (t.position >= this.arrangementLength) t.position = t.loop ? t.begin : 0;
+    t.position = playbackStart(t, this.arrangementLength, fromBeginning);
     this.transportStart = t.position;
     return this.evaluate(true, 'composition', countIn);
   }
@@ -466,12 +473,28 @@ export class Engine {
     this.clipPreview=draft;
     try{await this.compile('composition',updating);}catch(error){this.stop();throw error;}
   }
+  async prepareSave(candidate: Project, changedIds: string[], midiChanged: boolean) {
+    if (this.busy || this.midiSection || this.jam || this.recordingTransport) throw new Error('Finish recording or playback preparation before saving. Your draft is retained.');
+    const versions = new Map(candidate.tabs.map(tab => [tab.id, tab.code]));
+    const activeTarget = this.started ? this.target : undefined;
+    for (const id of changedIds) {
+      await this.compile(id, false, false, versions, undefined, true, candidate);
+    }
+    const activateInstrument = midiChanged ? await this.applyInstrument(instrumentFor(candidate).code, true) : undefined;
+    const composition = candidate.clips.length ? await this.compile('composition', activeTarget === 'composition', false, versions, undefined, true, candidate) : undefined;
+    const activateSong = activeTarget === 'composition' ? composition : activeTarget ? await this.compile(activeTarget, true, false, versions, undefined, true, candidate) : undefined;
+    return async () => {
+      await activateSong?.();
+      activateInstrument?.();
+    };
+  }
   async apply() { if (this.started && this.target) await this.compile(this.target, true); }
-  private async compile(target: string, update: boolean, countIn = false, versions?: Map<string,string>, replacement?:{tabId:string;takeId:string}) {
+  private async compile(target: string, update: boolean, countIn = false, versions?: Map<string,string>, replacement?:{tabId:string;takeId:string}, prepareOnly = false, preparedProject?: Project) {
     if (this.compilingBusy) return;
-    this.compilingBusy = true; this.changed();
+    this.preparingTarget = target; this.compilingBusy = true; this.changed();
     const epoch = this.epoch, abort = this.compileAbort = new AbortController();
-    const project = this.project(), clipPreview=this.clipPreview;
+    const project = preparedProject ?? this.project(), clipPreview=this.clipPreview;
+    versions ??= new Map(project.tabs.map(tab => [tab.id, tab.code]));
     const ids = target === 'composition' ? [...new Set(project.clips.map(c => c.tabId))] : [target];
     const clips = project.clips.map(original => {const c=clipPreview?.id===original.id?clipPreview:original;return ({ ...c, ...(replacement && c.tabId===replacement.tabId && c.playback==='once'?{takeId:replacement.takeId}:{}) });});
     const next = new Map<string, Pattern>(), codes = new Map<string, number>(), appliedCodes = new Map<string, string>();
@@ -541,7 +564,7 @@ export class Engine {
         takeEnd = ((asset.duration ?? 0) + 3) * cps;
       }
       if (epoch !== this.epoch) return;
-      releaseTakeSounds(takeNames);
+
       let pattern = target === 'composition' ? arrangement(clips, next, this.mutes, () => this.jam?.tabId, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(next.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
       if (this.midiSection && target === 'composition') {
         const composed = pattern; const section = this.midiSection;
@@ -557,21 +580,28 @@ export class Engine {
       }
       if (this.jam && target === 'composition') pattern = loopRange(pattern, this.jam.begin, this.jam.end);
       const base = target === 'composition' && !this.jam && !this.midiSection ? pattern : undefined;
-      if (base) pattern = this.timelinePattern(base);
+      if (base) pattern = this.timelinePattern(base, Math.max(0, ...clips.map(c => c.start + c.length)));
       // Check queries before replacing a working performance.
       pattern.queryArc(0, 1);
       if (!Number.isFinite(cps) || cps <= 0) throw new Error('Tempo must be greater than zero.');
       if (countIn && !update && !await this.countIn.wait(project.bpm)) return;
       if (epoch !== this.epoch) return;
+      const activate = async () => {
+      if (update && (!this.started || this.target !== target)) return;
+      releaseTakeSounds(takeNames);
       if (base) this.compositionBase = base;
       if (update) {
         const through=this.repl.scheduler.lastEnd,span=this.transport.end-this.transport.begin;
         const boundary=clipPreview?(Math.floor(Math.max(0,through)/span)+1)*span:undefined;
         this.pendingCycle = this.patterns.queue(pattern, through,boundary);
+        if (target === 'composition') {
+          this.pendingMuteCycle = this.mutes.queue(project.clips, project.tracks, through, project.soloTrackId);
+          this.endCycle = this.recordingTransport || this.transport.loop ? Infinity : Math.max(0, ...project.clips.map(c => c.start + c.length)) - this.transportStart;
+        }
         // Applying a tempo change with lookahead needs a separate clock transition.
         // Keep the running tempo; new code tempo takes effect on the next Play.
       } else {
-        this.mutes.reset(this.project().clips, this.project().tracks, this.project().soloTrackId);
+        this.mutes.reset(project.clips, project.tracks, project.soloTrackId);
         this.patterns.reset(pattern);
         this.repl.scheduler.setCps(cps);
         this.target = target;
@@ -581,12 +611,15 @@ export class Engine {
         await this.repl.scheduler.setPattern(live, true);
       }
       this.applied = codes; for (const [id, code] of appliedCodes) { this.appliedCodes.set(id, code); if (!versions || this.editorFor(id).code === code) { this.appliedAnchors.set(id, structuredClone(this.editorFor(id).anchors)); this.appliedVersions.set(id, new Map(this.editorFor(id).liveVersions)); } }
+      };
+      if (prepareOnly) return activate;
+      await activate();
     } finally {
       this.compiling = undefined; this.instrumentCompileSliders=undefined;
       core.setTime(() => this.repl.scheduler.now());
       core.setCpsFunc(() => this.repl.scheduler.cps);
       core.setPattern(this.repl.state.pattern);
-      this.compilingBusy = false; this.changed();
+      this.preparingTarget = undefined; this.compilingBusy = false; this.changed();
     }
   }
   tick() {
@@ -619,6 +652,52 @@ export class Engine {
   }
   noteOff(key: string | number) { const id = String(key); this.noteRequests.delete(id); const voice = this.notes.get(id); if (voice) { voice.stop(); this.notes.delete(id); } }
   releaseInputNotes() { this.noteRequests.clear(); for (const key of this.notes.keys()) this.noteOff(key); }
+
+  private warmupVersion = 0;
+  private warmupSignature = '';
+  /** Decode in advance without resuming audio, compiling code, or delaying session navigation. */
+  preloadProject(project: Project) {
+    const references = assetReferences(project);
+    const signature = JSON.stringify([references.map(id => [id, this.library.find(a => a.id === id)?.contentHash]), project.bpm,
+      project.clips.map(c => [c.takeId, c.anchors]), project.tabs.map(t => [t.audioAssetId, t.code]), project.midiInstrument?.code, project.audioInput?.appliedCode]);
+    if (signature === this.warmupSignature) return;
+    this.warmupSignature = signature;
+    const version = ++this.warmupVersion, tasks: (() => Promise<unknown>)[] = [];
+    const takes = new Set<string>();
+    const addTake = (id: string, clip?: Clip) => {
+      const key = id + ':' + renderKey(clipAnchors(clip ?? {}), project.bpm);
+      if (takes.has(key)) return;
+      takes.add(key);
+      tasks.push(async () => {
+        const asset = this.library.find(a => a.id === id) ?? await storedAsset(id);
+        if (!asset.missing) await preloadTake(asset, project, this.audioContext, await audioBlob(id), clip);
+      });
+    };
+    for (const clip of project.clips) if (clip.takeId) addTake(clip.takeId, clip);
+    for (const tab of project.tabs) if (tab.audioAssetId) addTake(tab.audioAssetId);
+    for (const id of references) {
+      const asset = this.library.find(a => a.id === id);
+      if (asset && !asset.missing) tasks.push(() => this.preload(asset));
+    }
+    const sounds = new Set([...project.tabs.map(t => t.code), project.midiInstrument?.code ?? ''].flatMap(code => soundBindings(code).map(b => b.sound)));
+    const urls = new Set<string>();
+    for (const sound of sounds) {
+      if (sound.startsWith('studio_')) continue;
+      const bank = audio.soundMap.get()[sound]?.data?.samples;
+      if (!bank) continue;
+      for (const url of Object.values(bank).flat()) if (typeof url === 'string' && !urls.has(url)) {
+        urls.add(url); tasks.push(() => audio.loadBuffer(url, this.audioContext, sound));
+      }
+    }
+    let index = 0;
+    const worker = async () => {
+      while (version === this.warmupVersion && index < tasks.length) {
+        const task = tasks[index++];
+        try { await task(); } catch { /* Playback reports failures and retries local assets normally. */ }
+      }
+    };
+    for (let i = 0; i < Math.min(4, tasks.length); i++) void worker();
+  }
 
   async preload(asset: Asset) {
     if (this.buffers.has(asset.id)) return;
@@ -674,9 +753,23 @@ export class Engine {
     this.changed();
   }
   panic() { this.stop(); }
-  restore(project: Project) { this.panic(); this.applied.clear(); this.appliedCodes = new Map(Object.entries(project.appliedPatterns ?? {})); this.appliedAnchors = new Map(Object.entries(project.appliedPatternAnchors ?? {})); this.appliedVersions.clear(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
+  restore(project: Project) { this.panic(); ++this.warmupVersion; this.warmupSignature = ''; clearPreparedTakes(this.audioContext); this.applied.clear(); this.appliedCodes = new Map(Object.entries(project.appliedPatterns ?? {})); this.appliedAnchors = new Map(Object.entries(project.appliedPatternAnchors ?? {})); this.appliedVersions.clear(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
   get started() { return this.repl?.scheduler.started ?? false; }
   get cycle() { return this.started ? Math.max(0, this.repl.scheduler.now()) : 0; }
+  /** UI activity follows the audible mix clock, including queued mute changes. */
+  get playbackScope() {
+    const running = this.started;
+    const target = running ? this.target : this.preparingTarget;
+    const phase = running && this.repl.scheduler.now() >= 0 ? 'playing' : this.countIn.remaining ? 'count-in' : this.busy || running ? 'preparing' : 'stopped';
+    const cycle = this.cycle;
+    const section = this.midiSection, jam = this.jam;
+    const position = jam ? jam.begin + cycle % (jam.end - jam.begin) : this.timelinePosition;
+    const transport = section || jam ? { position, begin: (section ?? jam)!.begin, end: (section ?? jam)!.end, loop: true } : { ...this.transport, position };
+    const clips = this.project().clips;
+    const included = running && target === 'composition' ? includedClips(clips, transport, this.recordingTransport ? 8192 : this.arrangementLength, c =>
+      this.mutes.isMutedAt(c.id, cycle) || c.tabId === jam?.tabId || !!(section && (!section.accompaniment || this.midiSolo) && c.id !== section.clip.id)) : new Set<string>();
+    return { phase, target, position, included, active: phase === 'playing' ? activeClips(clips, position, included) : new Set<string>() };
+  }
   get voicesPlaying() { return this.voices.size; }
   // Useful to feedback clients and browser acceptance tests; no private credentials.
   get diagnostics() { return { started: this.started, cycle: this.cycle, voices: this.voices.size, audioState: (audio.getAudioContext() as AudioContext).state, target: this.target, pendingCycle: this.pendingCycle, endCycle: Number.isFinite(this.endCycle) ? this.endCycle : null, notes: this.notes.size, liveVoices: PerformanceAudio.voiceCount, buffers: this.buffers.size }; }

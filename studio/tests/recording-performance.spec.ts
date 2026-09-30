@@ -77,7 +77,7 @@ for (const enabled of [false, true]) test(`MIDI velocity normalization ${enabled
   expect((await midiRecovery(page)).notes.map((n: any) => n.velocity)).toEqual([20, 120]);
   await page.reload(); await page.locator('#record-midi-options summary').click(); await expect(toggle).toBeChecked({ checked: enabled }); await expect(toggle).toBeDisabled();
   await page.locator('[data-accept]').filter({ visible: true }).click();
-  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   const saved = await project(page), code = saved.tabs.find((t: any) => t.name === 'Take 1').code;
   const velocities = [...code.matchAll(/velocity\(([^)]+)\)/g)].map(m => Number(m[1]));
   expect(velocities).toEqual(enabled ? [.787402, .787402] : [.15748, .944882]);
@@ -96,12 +96,12 @@ test('new MIDI pattern records directly onto an occupied composition track', asy
   await expect(page.locator('.pending-code').filter({ hasText: 'timeCat' })).toHaveCount(0);
   await page.locator('#composition-stop').click();
   await page.locator('[data-accept]').filter({ visible: true }).click();
-  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   const saved = await project(page), take = saved.tabs.find((t: any) => t.name === 'Take 1');
   expect(take.code).toContain('note(60)'); expect(take.code).toContain('note(75)');
   expect(saved.clips.find((c: any) => c.tabId === take.id).trackId).toBe('track-2');
   expect(saved.tabs).toHaveLength(5);
-  await page.reload(); await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.getByRole('tab', { name: 'Take 1', exact: true }).click(); await page.locator('[data-play-target=tab]').click();
   for (let pass = 0; pass < 2; pass++) {
     await page.evaluate(() => window.neonCapture.start()); await page.locator('#play').click(); await page.waitForTimeout(2200);
@@ -119,7 +119,7 @@ test('recording arms at the next bar without restarting composition and saves bo
   expect(after).toBeGreaterThanOrEqual(before);
   await page.waitForTimeout(1700); await notes(page); await page.locator('#composition-stop').click();
   await page.locator('#record-retry').click();
-  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   const saved = await project(page), take = saved.tabs.find((t: any) => t.name === 'Take 1');
   expect(take.code).toContain('Recorded MIDI'); expect(take.code).toContain('Recorded audio');
   expect(saved.clips.find((c: any) => c.tabId === take.id).start).toBeGreaterThan(0);
@@ -254,7 +254,7 @@ test('Skip to beginning stays stopped and loop recording keeps every pass on the
   await expect(page.locator('.performance-panel [data-state]')).toContainText('Recording ·');
   await notes(page); await page.waitForTimeout(500); await notes(page);
   await page.locator('#composition-stop').click(); await page.locator('[data-accept]').filter({ visible: true }).click();
-  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   const p = await project(page), tab = p.tabs.find((t: any) => t.name === 'Take 1');
   expect(tab.code.match(/note\(/g)).toHaveLength(32); expect(p.clips.find((c: any) => c.tabId === tab.id).length).toBeGreaterThan(.25);
   expect(p.tracks).toHaveLength(2); await expect(page.locator('#composition-loop')).toHaveAttribute('aria-pressed', 'true');
@@ -283,9 +283,9 @@ test('input sliders change recorded sound immediately and defer code edits until
     } });
   });
   await setup(page); await page.locator('[data-capture=midi]').click();
-  await inputTab(page, 'audio');
+  await inputTab(page, 'audio'); if (await page.locator('#effects-edit').isVisible()) await page.locator('#effects-edit').click();
   const content = page.locator('#editor .cm-content:visible');
-  await content.fill('AUDIO.gain(slider(0.2, 0, 1, 0.01))'); await page.locator('#audio-apply').click();
+  await content.fill('AUDIO.gain(slider(0.2, 0, 1, 0.01))'); await page.locator('#save-now').click();
   await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await expect.poll(() => page.evaluate(() => (window as any).inputPeaks[0] ?? 0)).toBeGreaterThan(.1);
   const before = await page.evaluate(() => { const peak = (window as any).inputPeaks[0]; (window as any).inputPeaks = []; return peak; });
@@ -317,7 +317,7 @@ test('a large legacy MIDI transcription saves and stays audible on repeated play
     return `timeCat([${start}, silence], [${duration}, note(${48 + i % 24}).velocity(0.8)], [${Number((length - start - duration).toFixed(6))}, silence]).slow(${length})`;
   });
   const code = `stack(${voices.join(',\n')}).s("sine").gain(slider(0.1, 0, 1, 0.01))`;
-  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);
   // Seed the former recorder format directly, as an existing browser session.
   // Large native contenteditable insertions exercise Chromium's paste implementation.
   await page.evaluate(async code => {
@@ -333,7 +333,7 @@ test('a large legacy MIDI transcription saves and stays audible on repeated play
     input.value = '0.2'; input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('slider(0.2');
-  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser', { timeout: 30000 });
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/,  { timeout: 30000 });
   const reloaded = Date.now();
   await page.reload(); await expect(page.getByRole('tab', { name: 'Lead', exact: true })).toBeVisible({ timeout: 30000 });
   console.log('Legacy take reload ms', Date.now() - reloaded);
