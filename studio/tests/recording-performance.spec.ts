@@ -211,7 +211,7 @@ test('15 minute dense MIDI and controller soak with mic and looping backing', as
   expect(metrics.maxGap).toBeLessThan(250);
   expect(metrics.maxClocks).toBeLessThan(256);
   await page.locator('#record-retry').click();
-  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible({ timeout: 90000 });
+  await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible({ timeout: 90000 }); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   const reloadStarted = Date.now();
   await page.reload();
   await expect(page.getByRole('tab', { name: 'Take 1', exact: true })).toBeVisible({ timeout: 30000 });
@@ -285,7 +285,7 @@ test('input sliders change recorded sound immediately and defer code edits until
   await setup(page); await page.locator('[data-capture=midi]').click();
   await inputTab(page, 'audio'); if (await page.locator('#effects-edit').isVisible()) await page.locator('#effects-edit').click();
   const content = page.locator('#editor .cm-content:visible');
-  await content.fill('AUDIO.gain(slider(0.2, 0, 1, 0.01))'); await page.locator('#save-now').click();
+  await content.fill('AUDIO.gain(slider(0.2, 0, 1, 0.01))'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.locator('#record-start').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   await expect.poll(() => page.evaluate(() => (window as any).inputPeaks[0] ?? 0)).toBeGreaterThan(.1);
   const before = await page.evaluate(() => { const peak = (window as any).inputPeaks[0]; (window as any).inputPeaks = []; return peak; });

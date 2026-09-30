@@ -460,7 +460,11 @@ function getEditor(id = project.activeTabId) {
   let instance = editors.get(id);
   if (!instance) {
     const config = instrumentFor(project);
-    const tab = id === AUDIO_EDITOR && project.audioInput ? { id, name: 'Audio input', color: 'teal' as const, code: project.audioInput.code, anchors: project.audioInput.anchors } : id === MIDI_EDITOR ? { id, name: 'MIDI instrument', color: 'blue' as const, code: config.code, anchors: config.anchors } : project.tabs.find(t => t.id === id) ?? ((activeRecordingTarget ?? performancePanel.sharedTarget)?.kind === 'new' && (activeRecordingTarget ?? performancePanel.sharedTarget)?.tabId === id ? validateRecordingTarget(project, (activeRecordingTarget ?? performancePanel.sharedTarget)!) : undefined);
+    const pendingTab = () => {
+      const target = activeRecordingTarget ?? performancePanel.sharedTarget ?? timelineRecording?.identity?.target;
+      return target?.kind === 'new' && target.tabId === id ? validateRecordingTarget(project, target) : undefined;
+    };
+    const tab = id === AUDIO_EDITOR && project.audioInput ? { id, name: 'Audio input', color: 'teal' as const, code: project.audioInput.code, anchors: project.audioInput.anchors } : id === MIDI_EDITOR ? { id, name: 'MIDI instrument', color: 'blue' as const, code: config.code, anchors: config.anchors } : project.tabs.find(t => t.id === id) ?? pendingTab();
     if (!tab) throw new Error('Pattern no longer exists.');
     const root = document.createElement('div'); root.className = 'tab-editor'; root.dataset.tabEditor = id; root.hidden = id !== project.activeTabId;
     $('#editor').append(root);

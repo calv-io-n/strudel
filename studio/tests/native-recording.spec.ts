@@ -62,7 +62,7 @@ test('on-screen keys stay available without asking for MIDI permission', async (
 });
 
 test('recording shows status then resolves to highlighted review code', async ({page}) => {
-  await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await recordBar(page); await page.locator('#record-midi-connection [data-midi-enable]').click();
+  await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('[data-play-target=tab]').click(); await recordBar(page); await page.locator('#record-midi-connection [data-midi-enable]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   const ghosts = page.locator('.tab-editor:not([hidden]) .pending-code');
   await expect(ghosts).toHaveCount(2); await expect(ghosts.first()).toHaveAttribute('aria-busy','true');
@@ -87,7 +87,7 @@ test('recording shows status then resolves to highlighted review code', async ({
 });
 
 test('reduced motion keeps the creating-code placeholders still', async ({page}) => {
-  await page.emulateMedia({reducedMotion:'reduce'}); await boot(page); await recordBar(page); await page.locator('#record-toggle').click();
+  await page.emulateMedia({reducedMotion:'reduce'}); await boot(page); await page.locator('[data-play-target=tab]').click(); await recordBar(page); await page.locator('#record-toggle').click();
   await expect(page.locator('.pending-code').first()).toBeVisible(); await expect(page.locator('.code-placeholder')).toHaveCount(0); await page.locator('#stop:visible, #composition-stop:visible').click();
 });
 

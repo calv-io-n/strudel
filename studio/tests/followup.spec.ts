@@ -180,7 +180,7 @@ test('metronome stays gold in both themes and neutral when switched off', async 
 test('continuous metronome clicks after the lead-in and Stop silences it without changing the mode', async ({ page }) => {
   await installAudioCapture(page); await boot(page);
   const content = page.locator('.tab-editor:not([hidden]) .cm-content'); await content.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End'); await page.keyboard.insertText('silence');
-  await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click(); await page.locator('#count-in').click();
+  await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved'); await page.locator('#count-in').click(); await page.locator('#count-in').click();
   await page.locator('[data-play-target=tab]').click(); await page.locator('#play').click(); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
   await page.evaluate(() => window.neonCapture.start()); await page.waitForTimeout(1300); const playing = await page.evaluate(() => window.neonCapture.finish()); expect(playing.peak).toBeGreaterThan(.01);
   const wav = decodeWav(Buffer.from(playing.wav, 'base64')); const onsets: number[] = [];

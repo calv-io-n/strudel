@@ -245,7 +245,7 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited
   await command(page, 'Return to range start'); await page.evaluate(() => window.neonCapture.start()); await playComposition(page); await page.waitForTimeout(1400);
   const composed = await page.evaluate(() => window.neonCapture.finish()); await page.locator('#composition-stop').click();
   expect(composed.peak).toBeGreaterThan(.009); expect(composed.peak).toBeLessThan(.018);
-  await command(page, 'Export full song render'); await page.locator('#export-format').selectOption('float32');
+  await command(page, 'Export full song render'); await page.locator('#export-format').selectOption('float32'); await page.locator('#export-exclude-input').check();
   const pending = page.waitForEvent('download'); await page.locator('#render-audio').click(); const file = await pending;
   const rendered = decodeWav(await readFile((await file.path())!)); const peak = rendered.left.reduce((p, n) => Math.max(p, Math.abs(n)), 0);
   expect(peak).toBeGreaterThan(.009); expect(peak).toBeLessThan(.018); expect(rendered.bits).toBe(32);
@@ -282,7 +282,7 @@ test('quiet float source survives import through full-song encoding below the PC
 async function blankComposition(page: Page) {
   await page.locator('#add-session').click(); await page.locator('#edit-name').fill('Blank recording');
   await page.locator('#edit-dialog button[value="confirm"]').click();
-  await expect(page.locator('#saved-projects')).toHaveValue('Blank-recording');
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved'); await expect(page.locator('#saved-projects')).toHaveValue('Blank-recording');
   await expect(page.locator('#composition-play')).toBeDisabled();
 }
 

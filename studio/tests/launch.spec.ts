@@ -27,7 +27,7 @@ async function midi(page: Page) {
     (window as any).playNote = (on: boolean) => input.onmidimessage?.({ data: new Uint8Array([on ? 144 : 128, 64, on ? 100 : 0]) });
   });
   await boot(page); await action(page, 'MIDI & on-screen controller'); await page.locator('#midi-settings-connection [data-midi-enable]').click();
-  await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape');
+  await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape'); await page.locator('[data-play-target=tab]').click();
 }
 
 test('MIDI supersaw loads its worklet under production security headers and produces audio', async ({ page }) => {
@@ -158,7 +158,7 @@ test('beat editing and keyboard trims preserve source phase and reject extension
 test('source BPM changes trigger spacing consistently in live tab playback and offline render', async ({ page }) => {
   await installAudioCapture(page); await boot(page); await replaceBody(page, 'note("c4").s("triangle").attack(0).decay(.04).sustain(0).release(0).gain(.3)');
   await page.getByRole('tab', { name: 'Lead', exact: true }).click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Pattern tempo…', exact: true }).click();
-  await page.locator('#edit-name').fill('84'); await page.locator('#edit-dialog button[value=confirm]').click();
+  await page.locator('#edit-name').fill('84'); await page.locator('#edit-dialog button[value=confirm]').click(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.locator('[data-play-target=tab]').click(); await page.evaluate(() => window.neonCapture.start()); await page.locator('#play').click(); await page.waitForTimeout(3600);
   await page.locator('#stop:visible, #composition-stop:visible').click(); const live = await page.evaluate(() => window.neonCapture.finish());
   const liveWav = decodeWav(Buffer.from(live.wav, 'base64'));
@@ -252,6 +252,6 @@ test('legacy audio recovery uses the Record bar without exposing another capture
   });
   await page.reload(); await expect(page.locator('#record-bar')).toBeVisible();
   await expect(page.locator('.recording-recovery')).toBeVisible(); await expect(page.locator('.recording-recovery [data-record]')).toHaveCount(0);
-  await page.locator('.recording-recovery [data-save]').click(); await expect(page.locator('.recording-recovery')).toBeHidden();
+  await page.locator('.recording-recovery [data-save]').click(); await expect(page.locator('.recording-recovery')).toBeHidden(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
   expect((await project(page)).tabs.some((t: any) => t.audioAssetId)).toBe(true);
 });
