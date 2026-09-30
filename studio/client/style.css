@@ -543,7 +543,7 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
   #record-bar { padding: 8px 12px; }
   .record-actions { flex-basis: 100%; }
   .drawer-bar { flex-wrap: wrap; padding: 4px 8px; }
-  #tabs { flex: 1 1 100%; }
+  #tabs { flex: 1 1 0; }
   #transport-state { display: none; }
   .composition-toolbar { padding: 8px 12px; }
   .tempo { margin-left: 0; }
@@ -660,14 +660,18 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 
 /* Long arrangements scroll inside the timeline, without widening editor controls. */
 .drawer-bar, #drawer, #composition-content, #sequencer-scroll { min-width: 0; max-width: 100%; }
-#tabs { flex: 1 1 0; scrollbar-width: thin; }
+#tabs { flex: 1 1 0; scrollbar-width: none; }
+#tabs::-webkit-scrollbar { display: none; }
+.pattern-navigation { display: flex; align-items: center; flex: 1 1 0; min-width: 0; }
+.pattern-navigation > button { flex: 0 0 26px; width: 26px; padding: 4px; font-size: 20px; }
+.pattern-navigation > button:disabled { opacity: .25; }
 #composition-editor, #composition-close, .composition-toggle { flex-shrink: 0; }
 @media (max-width: 1200px) {
   .topbar { flex-wrap: wrap; row-gap: 6px; height: auto; padding-block: 8px; }
   .transport { order: 5; flex-basis: 100%; justify-content: center; margin: 0; }
 }
 @media (max-width: 760px) {
-  #tabs { flex: 1 1 100%; }
+  #tabs { flex: 1 1 0; }
 }
 /* Sound destinations are part of the pattern, rather than another row of actions. */
 #chop-sounds { display:flex; flex:0 0 auto; gap:6px; overflow-x:auto; padding:8px 16px; border-bottom:1px solid var(--line); }
@@ -676,7 +680,7 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 #chop-sounds span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--muted); }
 .chop-reference { text-decoration:underline dotted; text-underline-offset:4px; cursor:pointer; }
 .chop-reference:hover, .chop-reference:focus { background:var(--sel); }
-.chop-picker .asset > button:not(.asset-select), .chop-picker #assignment, .chop-picker #add-sounds { display:none; }
+.chop-picker #assignment, .chop-picker #add-sounds { display:none; }
 .chop-picker .asset-options [data-edit-sample] { display:none; }
 #chop-audition { flex:none; border-bottom:1px solid var(--line); padding:0 24px 12px; }
 #chop-region { max-height:43vh; overflow:auto; }
@@ -763,3 +767,58 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
   #record-bar .record-destination, #record-bar .record-track { flex: 1; min-width: 0; }
   #record-bar .record-track select { max-width: none; }
 }
+
+/* Playback scope stays distinct from selection and keyboard focus. */
+#editor[data-playback=ready], #recorded-take-view[data-playback=ready] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+#editor[data-playback=playing], #recorded-take-view[data-playback=playing] { box-shadow: inset 0 0 0 2px var(--accent); }
+/* Paint above the isolated timeline so sticky track headers cannot cover the frame. */
+#composition-content { position: relative; isolation: isolate; }
+#composition-content[data-playback=ready]::after, #composition-content[data-playback=playing]::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+#composition-content[data-playback=ready]::after { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+#composition-content[data-playback=playing]::after { box-shadow: inset 0 0 0 2px var(--accent); }
+#editor[data-playback] { position: relative; }
+#editor[data-playback=ready]::after, #editor[data-playback=playing]::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; box-shadow: inherit; }
+#tabs [data-playback=ready], .composition-toggle[data-playback=ready] { box-shadow: inset 0 -2px color-mix(in srgb, var(--accent) 50%, transparent); }
+#tabs [data-playback=playing], .composition-toggle[data-playback=playing] { box-shadow: inset 0 -3px var(--accent); background: var(--sel); }
+#tabs [data-playback=playing]::after { content: 'Playing'; font-size: 10px; margin-left: 6px; color: var(--onsel); }
+.clip[data-playback=included] { opacity: 1; border-style: solid; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
+.clip[data-playback=excluded] { opacity: .5; }
+.clip[data-playback=playing] { opacity: 1; border-style: solid; box-shadow: inset 0 0 0 2px var(--accent); }
+.clip[data-playback=playing]::after { content: 'Playing'; display: block; width: fit-content; padding: 1px 4px; border-radius: 3px; background: var(--panel); color: var(--text); font-size: 10px; line-height: 1.3; position: sticky; left: 6px; }
+
+.clip[aria-pressed=true][data-playback] { outline: 2px solid var(--text); outline-offset: 2px; }
+.clip[aria-pressed=true][data-playback]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Staged edits are autosaved; the dot clears when Save commits playback. */
+[data-dirty]::before { content: '●'; display: inline-block; margin-right: 6px; font-size: 8px; color: var(--accent); vertical-align: middle; }
+.pattern-sounds { position: relative; flex-shrink: 0; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.pattern-sounds > summary { width: fit-content; cursor: pointer; font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 5px; }
+.pattern-sounds > summary:hover { background: var(--hover); color: var(--text); }
+.pattern-sounds #chop-sounds { position: absolute; z-index: 35; top: calc(100% - 4px); left: 16px; display: flex; flex-direction: column; align-items: stretch; width: min(320px, calc(100vw - 32px)); max-height: 45dvh; overflow: auto; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px #0002; }
+.pattern-sounds #chop-sounds button { display: flex; flex-direction: row; justify-content: space-between; gap: 20px; width: 100%; padding: 10px; text-align: left; }
+.pattern-sounds #chop-sounds span { max-width: 60%; }
+.chop-picker .library-options, .chop-picker .asset-options, .chop-picker [data-insert-existing], .chop-picker [data-use-sound] { display: none; }
+.chop-picker .asset { grid-template-columns: minmax(0, 1fr) auto; }
+#chop-audition { order: 2; flex-shrink: 0; padding: 12px 16px; border-top: 1px solid var(--line); }
+#chop-audition .chop-actions { justify-content: flex-end; }
+#chop-audition #chop-region { max-height: 35dvh; overflow: auto; }
+#effects-entry { padding: 28px 24px; max-width: 540px; }
+#effects-entry p { color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+#instrument-toolbar { align-items: center; gap: 12px; padding: 12px 16px; }
+#instrument-toolbar .instrument-status { margin: 0; padding: 0; flex-basis: auto; display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+#instrument-toolbar #midi-assignment { display: none; }
+.effects-options { position: relative; }
+.effects-options > summary { cursor: pointer; padding: 7px 10px; font-size: 12px; color: var(--muted); }
+.effects-options > div { position: absolute; z-index: 35; top: 100%; left: 0; width: min(300px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; box-shadow: 0 8px 24px #0002; }
+#midi-workspace-keys { flex-shrink: 0; padding: 8px 16px 14px; border-bottom: 1px solid var(--line); }
+.piano-heading { display: flex; align-items: center; justify-content: space-between; max-width: 520px; margin-bottom: 6px; font-size: 11px; color: var(--muted); }
+.piano-keybed { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); height: 108px; max-width: 520px; padding: 0; border: 1px solid #18212b; border-top: 5px solid #18212b; border-radius: 4px; background: #18212b; gap: 1px; touch-action: none; }
+.piano-keybed .piano-key { min-width: 0; min-height: 0; padding: 0 0 8px; border: 0; border-radius: 0 0 4px 4px; touch-action: none; }
+.piano-keybed .white { display: flex; align-items: flex-end; justify-content: center; background: #f5f3ec; color: #65707b; box-shadow: inset 0 -4px #d6d5ce; font-size: 10px; }
+.piano-keybed .black { position: absolute; top: 0; z-index: 1; width: 8%; height: 64%; transform: translateX(-50%); background: #242b34; border: 1px solid #101820; box-shadow: inset 0 -5px #101820; }
+.piano-keybed .white:hover { background: #e8edf2; }
+.piano-keybed .black:hover { background: #354455; }
+.piano-keybed .piano-key[data-pressed] { background: #a9c7ea; box-shadow: inset 0 -1px #7699c1; }
+.piano-keybed .piano-key:focus-visible { outline: 2px solid #477fc2; outline-offset: -3px; }
+#instrument-apply, #midi-output-controls { display: none; }
+@media (max-width: 700px) { #instrument-toolbar { flex-wrap: wrap; } .effects-options > div { position: fixed; top: auto; left: 16px; right: 16px; width: auto; max-height: 45dvh; overflow: auto; } }

@@ -14,7 +14,7 @@ async function setup(page: Page) {
   await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill('MIDI & on-screen controller'); await page.keyboard.press('Enter');
   await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape');
   await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('[data-play-target=tab]').click();
-  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);
 }
 async function saved(page:Page) { return page.evaluate(async()=> {const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('strudel-studio');r.onsuccess=()=>resolve(r.result);});return new Promise<any>(resolve=>{const r=db.transaction('projects').objectStore('projects').get('Neon-Drive');r.onsuccess=()=>{resolve(r.result);db.close();};});});}
 for(const context of ['tab','composition'] as const) for(const inputs of ['both-note','both-append','midi-note','midi-append','audio','audio-note'] as const) {
@@ -34,8 +34,8 @@ for(const context of ['tab','composition'] as const) for(const inputs of ['both-
   await page.getByRole('tab',{name:'Chords',exact:true}).click(); await page.waitForTimeout(100);
   await expect(page.getByRole('tab',{name:'Chords',exact:true})).toHaveAttribute('aria-selected','true');
   await page.locator('#record-toggle').click();
-  if(!inputs.startsWith('midi')) {await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');}
-  else if(inputs.startsWith('midi')) await page.locator('.performance-panel [data-accept]').click();
+  if(!inputs.startsWith('midi')) {await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);}
+  else if(inputs.startsWith('midi')) { await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('.performance-panel')).toBeHidden(); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/); }
 
   await expect.poll(async()=>{const p=await saved(page);return p.tabs.find((t:any)=>t.name==='Lead').code!==tab.code;}).toBe(true);
   const after=await saved(page), code=after.tabs.find((t:any)=>t.name==='Lead').code;
@@ -47,7 +47,7 @@ for(const context of ['tab','composition'] as const) for(const inputs of ['both-
   expect(after.tabs.find((t:any)=>t.name==='Chords').code).toBe(before.tabs.find((t:any)=>t.name==='Chords').code);
   await expect(page.getByRole('tab',{name:'Chords',exact:true})).toHaveAttribute('aria-selected','true');
   await page.getByRole('tab',{name:'Lead',exact:true}).click(); await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText(inputs.startsWith('midi') ? 'note(67)' : '// Recorded audio');
-  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);
   await page.reload(); const restored=await saved(page); expect(restored.tabs.find((t:any)=>t.name==='Lead').code).toBe(code);
  });
 }
@@ -64,7 +64,7 @@ test('both inputs share one count-in; Cancel creates no sections and early MIDI 
  await page.evaluate(()=>(window as any).combinedNote(true)); await page.waitForTimeout(150); await page.evaluate(()=>(window as any).combinedNote(false));
  await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
  expect((await midiRecovery(page))?.notes.length).toBe(1);
- await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
+ await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);
 });
 test('interrupted simultaneous capture recovers both sources in the same pattern',async({page})=>{
  await setup(page); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
@@ -81,7 +81,7 @@ test('interrupted simultaneous capture recovers both sources in the same pattern
        } cursor.continue();};tx.oncomplete=()=>resolve();});db.close();
  });
  await page.reload(); await expect(page.locator('#record-retry')).toBeVisible(); await page.locator('#record-retry').click();
- await expect(page.locator('#record-status')).toContainText('saved');
+ await expect(page.locator('#record-status')).toContainText('saved'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved');
  const p=await saved(page), code=p.tabs.find((t:any)=>t.name==='Lead').code;
  expect(code).toContain('// Recorded MIDI'); expect(code).toContain('// Recorded audio'); expect(p.tabs).toHaveLength(4);
 });
@@ -91,7 +91,7 @@ test('saved simultaneous sections play both the microphone tone and MIDI pitch',
  const content=page.locator('.tab-editor:not([hidden]) .cm-content'); await content.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End'); await page.keyboard.insertText('$: silence');
  await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click(); await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(75);
  await page.evaluate(()=>(window as any).combinedNote(true)); await page.waitForTimeout(650); await page.evaluate(()=>(window as any).combinedNote(false)); await page.locator('#stop').click();
- await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await expect(content).toContainText('// Recorded audio');
+ await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/); await expect(content).toContainText('// Recorded audio');
  const project=await saved(page), code=project.tabs.find((t:any)=>t.name==='Lead').code; const period=Number(code.split('// Recorded audio')[1].match(/\.slow\(([^)]+)\)/)[1])*240/project.bpm;
  await page.evaluate(()=>window.neonCapture.start()); await page.locator('#play').click(); await page.waitForTimeout((period+.7)*1000); const wav=await page.evaluate(()=>window.neonCapture.finish()); await page.locator('#stop').click();
  const decoded=decodeWav(Buffer.from(wav.wav,'base64'));
@@ -103,11 +103,11 @@ test('saved simultaneous sections play both the microphone tone and MIDI pitch',
 test('a failed combined save retains both inputs and retry commits exactly once',async({page})=>{
  await setup(page); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click(); await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(75);
  await page.evaluate(()=>(window as any).combinedNote(true)); await page.waitForTimeout(200); await page.evaluate(()=>(window as any).combinedNote(false)); await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
- await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;(window as any).restoreCombinedWrites=()=>IDBObjectStore.prototype.put=put;IDBObjectStore.prototype.put=function(value,key){if(this.name==='projects'&&value.tabs.some((t:any)=>t.code.includes('// Recorded audio')))throw new DOMException('Full','QuotaExceededError');return put.call(this,value,key);};});
+ await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;(window as any).restoreCombinedWrites=()=>IDBObjectStore.prototype.put=put;IDBObjectStore.prototype.put=function(value,key){if(this.name==='pending'&&value.project?.tabs.some((t:any)=>t.code.includes('// Recorded audio')))throw new DOMException('Full','QuotaExceededError');return put.call(this,value,key);};});
  await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('retained');
  expect((await saved(page)).tabs.some((t:any)=>t.code.includes('// Recorded audio'))).toBe(false);
  expect(!!(await midiRecovery(page))).toBe(true);
- await page.evaluate(()=>(window as any).restoreCombinedWrites()); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
+ await page.evaluate(()=>(window as any).restoreCombinedWrites()); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/);
  const code=(await saved(page)).tabs.find((t:any)=>t.name==='Lead').code;expect(code.match(/Recorded MIDI/g)).toHaveLength(1);expect(code.match(/Recorded audio/g)).toHaveLength(1);
  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('// Recorded audio');
 });
@@ -136,7 +136,7 @@ test('Tab review shows shadow code and previews both inputs before approval', as
  expect(power(330)).toBeGreaterThan(.02); expect(power(391.995)).toBeGreaterThan(.001);
  expect((await saved(page)).tabs).toEqual(before.tabs);
  const pending = await shadow.allTextContents();
- await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await expect(shadow).toHaveCount(0);
+ await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText(/^Saved(?: · changes queued)?$/); await expect(shadow).toHaveCount(0);
  const code = (await saved(page)).tabs.find((t:any)=>t.name==='Lead').code;
  for (const section of pending) expect(code).toContain(section);
 });

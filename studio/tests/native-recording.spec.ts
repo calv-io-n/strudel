@@ -36,13 +36,14 @@ test('connect once beside recording; instrument, settings and hotplug share the 
   await expect(page.locator('#midi-editor-connection [data-midi-status]')).toHaveText('MIDI · Keys');
 });
 
-test('multiple inputs connect directly from the same chooser without a second Connect step', async ({page}) => {
+test('the chooser connects one controller and Change device replaces it without a second Connect step', async ({page}) => {
   await boot(page, ['Keys','Pads']); await editor(page); const root = page.locator('#midi-editor-connection');
   await root.locator('[data-midi-enable]').click(); await expect(root.locator('[data-midi-status]')).toHaveText('Choose your MIDI input.');
-  await root.getByRole('checkbox',{name:'Keys Connect',exact:true}).check(); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Keys');
-  await root.getByRole('checkbox',{name:'Pads Connect',exact:true}).check(); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Keys, Pads');
-  await root.getByRole('checkbox',{name:'Keys Connected',exact:true}).uncheck(); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Pads');
-  await root.getByRole('checkbox',{name:'Pads Connected',exact:true}).uncheck(); await expect(root.locator('[data-midi-status]')).toHaveText('Choose your MIDI input.');
+  await root.getByRole('combobox',{name:'MIDI controller'}).selectOption({label:'Keys'}); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Keys');
+  await root.getByRole('button',{name:'Change device'}).click();
+  await root.getByRole('combobox',{name:'MIDI controller'}).selectOption({label:'Pads'}); await expect(root.locator('[data-midi-status]')).toHaveText('MIDI · Pads');
+  await root.getByRole('button',{name:'Change device'}).click();
+  await root.getByRole('combobox',{name:'MIDI controller'}).selectOption(''); await expect(root.locator('[data-midi-status]')).toHaveText('Choose your MIDI input.');
   expect(await page.evaluate(() => (window as any).midiFixture.calls)).toBe(1);
 });
 
@@ -61,7 +62,7 @@ test('on-screen keys stay available without asking for MIDI permission', async (
 });
 
 test('recording shows status then resolves to highlighted review code', async ({page}) => {
-  await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await recordBar(page); await page.locator('#record-midi-connection [data-midi-enable]').click();
+  await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('[data-play-target=tab]').click(); await recordBar(page); await page.locator('#record-midi-connection [data-midi-enable]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   const ghosts = page.locator('.tab-editor:not([hidden]) .pending-code');
   await expect(ghosts).toHaveCount(2); await expect(ghosts.first()).toHaveAttribute('aria-busy','true');
@@ -80,13 +81,13 @@ test('recording shows status then resolves to highlighted review code', async ({
   await page.screenshot({path:'/tmp/native-code-review-dark.png'}); await page.locator('#dark-mode').uncheck();
   await page.setViewportSize({width:640,height:900}); await ghosts.last().scrollIntoViewIfNeeded(); await ghosts.last().evaluate(el => { el.closest('.cm-scroller')!.scrollLeft = 0; }); await page.screenshot({path:'/tmp/native-code-review-narrow.png'});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  const previewBounds = await page.locator('#record-preview').boundingBox(), closeBounds = await page.locator('#record-close').boundingBox();
-  expect(Math.abs(previewBounds!.y - closeBounds!.y)).toBeLessThan(5);
+  const previewBounds = await page.locator('#record-preview').boundingBox(), keepBounds = await page.locator('#record-retry').boundingBox();
+  expect(Math.abs(previewBounds!.y - keepBounds!.y)).toBeLessThan(5);
   await page.locator('#record-retry').click(); await expect(ghosts).toHaveCount(0);
 });
 
 test('reduced motion keeps the creating-code placeholders still', async ({page}) => {
-  await page.emulateMedia({reducedMotion:'reduce'}); await boot(page); await recordBar(page); await page.locator('#record-toggle').click();
+  await page.emulateMedia({reducedMotion:'reduce'}); await boot(page); await page.locator('[data-play-target=tab]').click(); await recordBar(page); await page.locator('#record-toggle').click();
   await expect(page.locator('.pending-code').first()).toBeVisible(); await expect(page.locator('.code-placeholder')).toHaveCount(0); await page.locator('#stop:visible, #composition-stop:visible').click();
 });
 

@@ -13,17 +13,44 @@ export function takeEffects(asset: Asset, project: Project) {
   return project.audioInput && project.audioInput.id === asset.recording?.inputId ? project.audioInput.appliedCode : asset.recording?.effectsCode ?? 'AUDIO';
 }
 const registeredTakes=new Set<string>();
+type PreparedAudio = { rendered: AudioBuffer; raw: AudioBuffer };
+const preparedTakes = new WeakMap<BaseAudioContext, Map<string, Promise<PreparedAudio>>>();
+export function clearPreparedTakes(context: BaseAudioContext) { preparedTakes.delete(context); }
 /** Drop registered take sounds except the ones a compile just prepared; a seek reuses the compiled pattern, so stop() must not release them. */
 export function releaseTakeSounds(keep: Iterable<string> = []) { const kept = new Set(keep); for (const name of registeredTakes) if (!kept.has(name)) { audio.soundMap.setKey(name, undefined); registeredTakes.delete(name); } }
 function shortHash(text: string) { let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); }
 export function takeSoundName(id: string, variant = 'raw') { return `studio_take_${id.replaceAll('-', '')}_${variant === 'raw' ? 'raw' : shortHash(variant)}`; }
-/** Register one playable variant of a take: raw audio, or audio rendered for the clip's anchors at the project tempo. Returns the sound name. */
+/** Keep session takes decoded without registering sounds or changing the audible effects. */
+export async function preloadTake(asset: Asset, project: Project, context: BaseAudioContext, blob: Blob, clip?: Clip) {
+  let cache = preparedTakes.get(context);
+  if (!cache) { cache = new Map(); preparedTakes.set(context, cache); }
+  const anchors = clipAnchors(clip ?? {}), bpm = project.bpm;
+  const key = JSON.stringify([asset.id, asset.contentHash ?? asset.createdAt, renderKey(anchors, bpm)]);
+  let task = cache.get(key);
+  if (!task) {
+    task = (async () => {
+      const rendered = await takeBuffer(context, asset, blob, anchors, bpm);
+      const raw = isStretched(anchors, bpm) ? await takeBuffer(context, asset, blob, [{ source: 0, beat: 0 }], bpm) : rendered;
+      return { rendered, raw };
+    })();
+    cache.set(key, task);
+  }
+  try { return await task; } catch (error) { if (cache.get(key) === task) cache.delete(key); throw error; }
+}
+/** Register a take using decoded audio shared with background preparation. */
 export async function prepareTake(asset: Asset, project: Project, context: BaseAudioContext, blob: Blob, clip?: Clip, signal?: AbortSignal) {
   const code = takeEffects(asset, project); compileAudioEffects(code);
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   const anchors = clipAnchors(clip ?? {}), bpm = project.bpm, variant = renderKey(anchors, bpm), stretched = isStretched(anchors, bpm);
-  const rendered = await takeBuffer(context, asset, blob, anchors, bpm, signal), name = takeSoundName(asset.id, variant);
-  // A rendered buffer covers the first to the last anchor; the rest of the sample plays from the raw buffer.
-  const raw = stretched ? await takeBuffer(context, asset, blob, [{ source: 0, beat: 0 }], bpm, signal) : rendered;
+  const pending = preloadTake(asset, project, context, blob, clip);
+  const { rendered, raw } = await (signal ? new Promise<PreparedAudio>((resolve, reject) => {
+    const abort = () => reject(new DOMException('Cancelled', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    pending.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    if (signal.aborted) abort();
+  }) : pending);
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  const name = takeSoundName(asset.id, variant);
   const last = anchors[anchors.length - 1], renderedSeconds = stretched ? (last.beat - anchors[0].beat) * 60 / bpm : 0;
   registeredTakes.add(name);
   audio.registerSound(name, (time: number, value: any, onended: () => void) => {

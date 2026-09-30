@@ -18,7 +18,12 @@ export function soundBindings(code: string): SoundBinding[] {
       let node=d.init;while(node?.type==='CallExpression' && node.callee.type==='MemberExpression' && !literal(node))node=node.callee.object;
       const token=literal(node);if(token)names.set(token,d.id.name);
     }
-    walk(ast,node=>{const token=literal(node);if(!token)return;const name=names.get(token);const binding={id:name?`const:${name}`:`literal:${result.length}`,label:name?name[0].toUpperCase()+name.slice(1):`Sound ${result.length+1}`,sound:token.value,from:token.start+1,to:token.end-1,references:[{from:token.start+1,to:token.end-1}]};result.push(binding);if(name)named.set(name,binding);});
+    const labels = new Map<any, string>();
+    for (const statement of ast.body) if (statement.type === 'LabeledStatement' && statement.label.name !== '$') {
+      const label = statement.label.name.replace(/^\$/, '');
+      walk(statement.body, node => { const token = literal(node); if (token) labels.set(token, label[0].toUpperCase() + label.slice(1)); });
+    }
+    walk(ast,node=>{const token=literal(node);if(!token)return;const name=names.get(token);const binding={id:name?`const:${name}`:`literal:${result.length}`,label:name?name[0].toUpperCase()+name.slice(1):labels.get(token)??`Sound ${result.length+1}`,sound:token.value,from:token.start+1,to:token.end-1,references:[{from:token.start+1,to:token.end-1}]};result.push(binding);if(name)named.set(name,binding);});
     walk(ast,(node,parent)=>{if(node.type!=='Identifier'||!named.has(node.name))return;if(parent?.type==='MemberExpression'&&parent.property===node&&!parent.computed)return;if(parent?.type==='Property'&&parent.key===node&&!parent.computed&&!parent.shorthand)return;const binding=named.get(node.name)!;binding.references.push({from:node.start,to:node.end});});
     return result;
   } catch { return []; }

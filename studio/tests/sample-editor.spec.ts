@@ -65,7 +65,7 @@ test('extract, audition, download, insert and reopen a saved sample without chan
   expect(assets).toHaveLength(2); expect(assets.find(a => a.id === first.id).duration).toBe(.5);
   expect(assets.find(a => a.id !== first.id).extraction.assetId).toBe(first.id);
   await page.getByRole('link', { name: /Back to Studio/ }).click();
-  await page.locator('#save-now').click();
+  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.keyboard.press('Control+k'); await page.locator('#command-palette input').fill('Download project backup');
   const backingUp = page.waitForEvent('download'); await page.keyboard.press('Enter');
   const backup = await backingUp;
@@ -149,7 +149,7 @@ for (const legacy of [false, true]) test(`${legacy ? 'Previously inserted' : 'Ne
     await page.locator('#editor .cm-content:visible').click(); await page.keyboard.press('Control+End');
     await page.keyboard.insertText(`\nsamples({ studio_${asset.id.replaceAll('-', '')}: [location.origin + '/api/samples/${asset.id}/audio'] })\n`);
   }
-  await page.locator('#save-now').click();
+  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.reload();
   await expect(page.locator('#editor .cm-content:visible')).toContainText('Playback chop');
   await page.locator('[data-play-target=tab]').click();
@@ -165,7 +165,7 @@ for (const legacy of [false, true]) test(`${legacy ? 'Previously inserted' : 'Ne
 test('a single WAV placed on the timeline plays once and extending the clip adds silence', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
   await page.locator('#add-session').click(); await page.locator('#edit-name').fill('One-shot sample'); await page.locator('#edit-dialog button[value="confirm"]').click();
-  await expect(page.locator('#saved-projects')).toHaveValue('One-shot-sample');
+  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');await expect(page.locator('#saved-projects')).toHaveValue('One-shot-sample');
   await page.locator('#editor .cm-content:visible').click(); await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End'); await page.keyboard.press('Backspace');
   await expect(page.locator('#editor .cm-content:visible')).not.toContainText('$bass');
   await page.evaluate(()=>location.hash='/samples/edit');
@@ -179,7 +179,7 @@ test('a single WAV placed on the timeline plays once and extending the clip adds
   await expect(page.locator('#clip-length')).toHaveValue('4');
   await page.locator('#clip-length').fill('16');await page.locator('#clip-form button[value=save]').click();
   await page.locator('[data-clip]').first().click({button:'right'});await page.getByRole('menuitem',{name:'Duplicate',exact:true}).click();
-  await expect(page.locator('[data-clip]')).toHaveCount(2);
+  await expect(page.locator('[data-clip]')).toHaveCount(2);await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.evaluate(()=>{
     const stats=(window as any).takeAllocations={decodes:0,convolvers:0};
     const decode=BaseAudioContext.prototype.decodeAudioData,convolver=BaseAudioContext.prototype.createConvolver;
@@ -189,29 +189,30 @@ test('a single WAV placed on the timeline plays once and extending the clip adds
   await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(4600);
   const captured=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
   expect(captured.bins[0].peak).toBeGreaterThan(.02);
-  expect(await page.evaluate(()=>(window as any).takeAllocations)).toEqual({decodes:1,convolvers:0});
+  expect(await page.evaluate(()=>(window as any).takeAllocations)).toEqual({decodes:0,convolvers:0});
   expect(Math.max(...captured.bins.slice(3).map(b=>b.peak))).toBeLessThan(.0001);
-  await page.locator('#save-now').click();await page.reload();
+  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');await page.reload();
   await page.locator('[data-play-target=composition]').click();await clipProperties(page);
   await expect(page.locator('#clip-playback')).toHaveValue('once');
-  await page.locator('#clip-playback').selectOption('pattern');await page.locator('#clip-form button[value=save]').click();
+  await page.locator('#clip-playback').selectOption('pattern');await page.locator('#clip-form button[value=save]').click();await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
   await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(4600);
   const repeated=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
   expect(repeated.bins[4].peak).toBeGreaterThan(.02);
   await clipProperties(page);await page.locator('#clip-playback').selectOption('once');await page.locator('#clip-form button[value=save]').click();
-  await page.locator('#save-now').click();await page.reload();await page.locator('[data-play-target=composition]').click();
-  await page.evaluate(()=>{
+  await page.locator('#save-now').click();await expect(page.locator('#saved-state')).toHaveText('Saved');
+  await page.addInitScript(()=>{
     const decode=BaseAudioContext.prototype.decodeAudioData;
     BaseAudioContext.prototype.decodeAudioData=async function(...args:Parameters<typeof decode>){
       await new Promise<void>(resolve=>(window as any).releaseTakeDecode=resolve);
       return decode.apply(this,args);
     };
   });
+  await page.reload();await expect(page.locator('#saved-projects')).toHaveValue('One-shot-sample');await page.locator('[data-play-target=composition]').click();
   await page.locator('#composition-play').click();
   await page.waitForFunction(()=>typeof (window as any).releaseTakeDecode==='function');
   await page.locator('#composition-stop').click();await page.evaluate(()=>(window as any).releaseTakeDecode());
   await expect(page.locator('#composition-play')).toBeEnabled();
-  await expect(page.locator('#transport-state')).toContainText('Stopped');
+  await expect(page.locator('#transport-state')).toContainText('Ready');
 
 });
 
